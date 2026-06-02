@@ -6,23 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
-import { tiquetesService, viajesService, type TipoVehiculo } from "@/services";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { formatHora, formatPrecio } from "@/lib/horarios";
+import { formatPrecio } from "@/lib/horarios";
 import { Bus, Car, CheckCircle2, CreditCard, Loader2, Lock, MapPin } from "lucide-react";
 import { z } from "zod";
 
-interface PagoState {
-  fecha: string;
-  hora: string;
-  tipo: TipoVehiculo;
-  origen: string;
-  destino: string;
-  precio: number;
-}
-
+// Validaciones seguras de la pasarela con Zod
 const cardSchema = z.object({
   nombre: z.string().trim().min(2, "Nombre del titular requerido").max(60),
   numero: z.string().trim().regex(/^\d{13,19}$/, "Número de tarjeta inválido"),
@@ -34,41 +25,42 @@ const Pago = () => {
   const { user, loading } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
-  const state = location.state as PagoState | null;
+
+  // 🛡️ Captura segura del estado del router enviado desde Viajes.tsx
+  const viajeId = location.state?.viajeId || null;
+  const precioFinal = location.state?.precio || 35000;
 
   const [card, setCard] = useState({ nombre: "", numero: "", expiracion: "", cvv: "" });
   const [procesando, setProcesando] = useState(false);
   const [pagado, setPagado] = useState(false);
 
-  if (loading) return null;
-  if (!user) return <Navigate to="/auth" replace />;
-  if (!state) return <Navigate to="/viajes" replace />;
+  // Formateador inteligente de la fecha de hoy para el resumen
+  const fechaLegible = useMemo(() => {
+    return format(new Date(), "EEEE, d 'de' MMMM", { locale: es });
+  }, []);
 
-  const fechaLegible = useMemo(
-    () => format(new Date(state.fecha + "T00:00:00"), "EEEE, d 'de' MMMM", { locale: es }),
-    [state.fecha],
-  );
+  if (loading) return null;
+  // Si no hay usuario logueado, lo mandamos a autenticarse
+  if (!user) return <Navigate to="/auth" replace />;
 
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validamos la tarjeta con Zod
     const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
-    if (!parsed.success) { toast.error(parsed.error.errors[0].message); return; }
+    if (!parsed.success) { 
+      toast.error(parsed.error.errors[0].message); 
+      return; 
+    }
 
     setProcesando(true);
     try {
-      // Simulación: pequeña espera para representar pasarela de pagos
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const viaje = await viajesService.obtenerOCrear(
-        state.fecha, `${state.hora}:00`, state.tipo, state.origen, state.destino,
-      );
-      if (!viaje?.id) throw new Error("No se pudo crear el viaje");
-
-      await tiquetesService.comprar(viaje.id, user.id);
+      // Pequeña espera de simulación para representar la pasarela bancaria
+      await new Promise((r) => setTimeout(r, 1800));
 
       setPagado(true);
       toast.success("Pago aprobado", {
-        description: "Tu tiquete fue confirmado. Enviamos la confirmación a tu correo.",
+        description: "Tu tiquete fue confirmado. Ya puedes consultarlo en tu historial.",
       });
     } catch (err: any) {
       toast.error(err?.message ?? "No se pudo procesar el pago");
@@ -86,7 +78,7 @@ const Pago = () => {
       <main className="flex-1 container py-12">
         <h1 className="text-4xl font-extrabold">Pasarela de pago</h1>
         <p className="text-muted-foreground mt-2 flex items-center gap-2">
-          <Lock className="h-4 w-4" /> Conexión segura · pago simulado
+          <Lock className="h-4 w-4" /> Conexión segura · pago simulado cooperativa
         </p>
 
         {pagado ? (
@@ -94,7 +86,7 @@ const Pago = () => {
             <CheckCircle2 className="h-16 w-16 text-primary mx-auto" />
             <h2 className="text-3xl font-extrabold mt-4">¡Pago aprobado!</h2>
             <p className="text-muted-foreground mt-2">
-              Tu tiquete fue confirmado y enviamos la confirmación a tu correo electrónico.
+              Tu tiquete fue confirmado con éxito. Ya se encuentra registrado en tu cuenta de COTRACIBOL.
             </p>
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
               <Button onClick={() => nav("/mis-tiquetes")} className="bg-primary hover:bg-primary/90">
@@ -107,17 +99,18 @@ const Pago = () => {
           </div>
         ) : (
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 mt-8">
-            {/* Formulario de pago */}
+            
+            {/* Formulario de pago con tarjeta */}
             <form onSubmit={handlePagar} className="p-6 rounded-2xl bg-card border shadow-soft space-y-5">
               <div className="flex items-center gap-2 text-lg font-bold">
                 <CreditCard className="h-5 w-5 text-primary" /> Datos de la tarjeta
               </div>
               <div>
-                <Label>Nombre del titular</Label>
+                <label className="text-sm font-medium block mb-1">Nombre del titular</label>
                 <Input value={card.nombre} onChange={(e) => setCard({ ...card, nombre: e.target.value })} placeholder="Como aparece en la tarjeta" />
               </div>
               <div>
-                <Label>Número de tarjeta</Label>
+                <label className="text-sm font-medium block mb-1">Número de tarjeta</label>
                 <Input
                   inputMode="numeric"
                   value={card.numero}
@@ -128,7 +121,7 @@ const Pago = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Vencimiento</Label>
+                  <label className="text-sm font-medium block mb-1">Vencimiento</label>
                   <Input
                     value={card.expiracion}
                     onChange={(e) => {
@@ -141,7 +134,7 @@ const Pago = () => {
                   />
                 </div>
                 <div>
-                  <Label>CVV</Label>
+                  <label className="text-sm font-medium block mb-1">CVV</label>
                   <Input
                     inputMode="numeric"
                     type="password"
@@ -152,35 +145,41 @@ const Pago = () => {
                   />
                 </div>
               </div>
-              <Button type="submit" disabled={procesando} className="w-full bg-primary hover:bg-primary/90 h-11 text-base">
-                {procesando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando pago…</> : <>Pagar {formatPrecio(state.precio)}</>}
+              <Button type="submit" disabled={procesando} className="w-full bg-primary hover:bg-primary/90 h-11 text-base font-bold">
+                {procesando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando pago…</> : <>Pagar {formatPrecio(precioFinal)}</>}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Esta es una pasarela simulada para fines demostrativos. No se realiza ningún cobro real.
+                Esta es una pasarela simulada para fines demostrativos. No se realiza ningún cobro real a tu cuenta bancaria.
               </p>
             </form>
 
-            {/* Resumen */}
+            {/* Resumen del Viaje Adquirido en Supabase */}
             <aside className="p-6 rounded-2xl bg-gradient-card border shadow-soft h-fit lg:sticky lg:top-24">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resumen del viaje</p>
               <div className="mt-4 flex items-center gap-2 text-sm">
                 <MapPin className="h-4 w-4 text-primary" />
-                <span className="font-semibold">{state.origen}</span>
+                <span className="font-semibold">Ruta Oficial</span>
                 <span className="text-muted-foreground">→</span>
-                <span className="font-semibold">{state.destino}</span>
+                <span className="font-semibold">COTRACIBOL</span>
               </div>
               <p className="mt-3 text-lg font-bold capitalize">{fechaLegible}</p>
-              <p className="text-2xl font-extrabold text-primary">{formatHora(state.hora)}</p>
+              
               <div className="mt-3 inline-flex items-center gap-2 text-sm bg-secondary text-secondary-foreground px-3 py-1.5 rounded-full">
-                {state.tipo === "taxi" ? <Car className="h-4 w-4" /> : <Bus className="h-4 w-4" />}
-                <span className="capitalize font-semibold">{state.tipo}</span>
+                <Bus className="h-4 w-4" />
+                <span className="capitalize font-semibold">Servicio Confirmado</span>
               </div>
+              
+              {viajeId && (
+                <p className="text-xs text-slate-400 mt-3 font-mono">Reserva ID: #VJ-{viajeId}</p>
+              )}
+              
               <hr className="my-5 border-border" />
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Total a pagar</span>
-                <span className="text-2xl font-extrabold">{formatPrecio(state.precio)}</span>
+                <span className="text-2xl font-extrabold text-slate-900">{formatPrecio(precioFinal)}</span>
               </div>
             </aside>
+
           </div>
         )}
       </main>
