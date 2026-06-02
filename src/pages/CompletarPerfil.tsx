@@ -48,15 +48,16 @@ export default function CompletarPerfil() {
 
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Realizamos el UPSERT enviando solo los datos del formulario de forma segura
+      // Realizamos el UPSERT enviando el userId que ya tienes guardado en el estado
       const { error } = await queryBase
         .upsert({
-          email: userEmail, // Clave única para encontrar el registro
+          id: userId,          // <--- Cambiado a userId (así se llama tu estado aquí)
+          email: userEmail,    // Clave única para encontrar el registro
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
           num_documento: numDocumento,
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
-          id_rol: 1,      // Valores numéricos por defecto requeridos en tu BD
+          id_rol: 1,           // Valores numéricos por defecto requeridos en tu BD
           id_estado: 1
         }, { onConflict: 'email' }); // Si el email coincide, actualiza los campos anteriores
 
