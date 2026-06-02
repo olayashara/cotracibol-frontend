@@ -54,7 +54,7 @@ const Viajes = () => {
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
 
   // Mapeo estático de las capacidades del vehículo
-  const capacidadMax = tipo === "buseta" ? 15 : 4; 
+  const capacidadMax = tipo === "buseta" ? 8 : 4; 
 
   // --- 1. GUARDÍAN DE SEGURIDAD CORREGIDO POR EMAIL Y APELLIDOS EN PLURAL ---
   useEffect(() => {
@@ -255,7 +255,7 @@ const Viajes = () => {
                   <TabsTrigger value="taxi">Taxi</TabsTrigger>
                 </TabsList>
                 <TabsContent value="buseta" className="mt-3 text-sm text-muted-foreground">
-                  Capacidad: 15 cupos · Tarifas según trayecto oficial de la cooperativa.
+                  Capacidad: 8 cupos · Tarifas según trayecto oficial de la cooperativa.
                 </TabsContent>
                 <TabsContent value="taxi" className="mt-3 text-sm text-muted-foreground">
                   Capacidad: 4 cupos · Servicio rápido puerta a puerta.
