@@ -60,7 +60,7 @@ const Viajes = () => {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         
         if (currentUser) {
-          const queryBase = supabase.from("persona" as any) as any;
+          const queryBase = supabase.from("tbl_persona" as any) as any;
           
           // 1. Intentamos buscar si ya existe en la tabla persona
           const { data: perfiles } = await queryBase

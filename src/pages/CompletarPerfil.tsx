@@ -47,7 +47,7 @@ export default function CompletarPerfil() {
       setLoading(true);
 
       // Solución al error de TypeScript: Rompemos el tipado asignando la tabla a una consulta genérica
-      const queryBase = supabase.from("persona" as any) as any;
+      const queryBase = supabase.from("tbl_persona" as any) as any;
 
       // Realizamos la actualización de forma directa
       const { error } = await queryBase
