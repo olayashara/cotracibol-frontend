@@ -46,18 +46,19 @@ export default function CompletarPerfil() {
     try {
       setLoading(true);
 
-      // Apuntamos a la tabla correcta
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Actualizamos la fila buscando por el correo electrónico del usuario
+      // Realizamos el UPSERT enviando solo los datos del formulario de forma segura
       const { error } = await queryBase
-        .update({
+        .upsert({
+          email: userEmail, // Clave única para encontrar el registro
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
           num_documento: numDocumento,
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
-        })
-        .eq("email", userEmail); // <-- Cambiado de "id" a "email" para evitar el conflicto de tipos
+          id_rol: 1,      // Valores numéricos por defecto requeridos en tu BD
+          id_estado: 1
+        }, { onConflict: 'email' }); // Si el email coincide, actualiza los campos anteriores
 
       if (error) throw error;
 
@@ -66,7 +67,9 @@ export default function CompletarPerfil() {
         description: "Tus datos se guardaron con éxito. Bienvenido a COTRACIBOL.",
       });
 
+      // Redirección inmediata tras el guardado exitoso
       navigate("/viajes");
+
     } catch (error: any) {
       toast({
         variant: "destructive",
