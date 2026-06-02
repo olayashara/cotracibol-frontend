@@ -61,7 +61,7 @@ const Index = () => {
             </div>
             <h3 className="mt-5 text-2xl font-bold">Taxi compartido</h3>
             <p className="mt-2 text-muted-foreground">Salidas cada hora entre 6:00 a.m. y 6:00 p.m. Ideal para viajes rápidos.</p>
-            <p className="mt-4 text-3xl font-extrabold text-primary">$18.000 <span className="text-sm font-normal text-muted-foreground">/ pasajero</span></p>
+            <p className="mt-4 text-3xl font-extrabold text-primary">$44.000 <span className="text-sm font-normal text-muted-foreground">/ pasajero</span></p>
           </article>
           <article className="group p-8 rounded-2xl bg-gradient-card border border-border shadow-soft hover:shadow-elegant transition-smooth">
             <div className="flex items-center justify-between">
@@ -70,7 +70,7 @@ const Index = () => {
             </div>
             <h3 className="mt-5 text-2xl font-bold">Buseta</h3>
             <p className="mt-2 text-muted-foreground">Tres salidas diarias: 6:00 a.m., 12:00 m. y 5:00 p.m. Mayor comodidad y equipaje.</p>
-            <p className="mt-4 text-3xl font-extrabold text-primary">$15.000 <span className="text-sm font-normal text-muted-foreground">/ pasajero</span></p>
+            <p className="mt-4 text-3xl font-extrabold text-primary">$40.000 <span className="text-sm font-normal text-muted-foreground">/ pasajero</span></p>
           </article>
         </div>
       </section>
@@ -81,7 +81,7 @@ const Index = () => {
           {[
             { icon: ShieldCheck, t: "Conductores certificados", d: "Todos nuestros vehículos pasan revisión técnica mensual." },
             { icon: Clock, t: "Puntualidad garantizada", d: "Salidas en hora exacta. Tu tiempo es lo más importante." },
-            { icon: MapPin, t: "Ruta directa", d: "Medellín – Ciudad Bolívar sin escalas innecesarias." },
+            { icon: MapPin, t: "Ruta directa", d: "Medellín – Ciudad Bolívar sin paradas innecesarias." },
           ].map(({ icon: Icon, t, d }) => (
             <div key={t} className="flex gap-4">
               <div className="shrink-0 p-3 rounded-xl bg-primary text-primary-foreground"><Icon className="h-5 w-5" /></div>
