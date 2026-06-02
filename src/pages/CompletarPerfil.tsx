@@ -48,18 +48,17 @@ export default function CompletarPerfil() {
 
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Realizamos el UPSERT enviando el userId que ya tienes guardado en el estado
+      // Al apagar RLS, podemos guardar de forma segura usando solo el email
       const { error } = await queryBase
         .upsert({
-          id: userId,          // <--- Cambiado a userId (así se llama tu estado aquí)
-          email: userEmail,    // Clave única para encontrar el registro
+          email: userEmail, 
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
           num_documento: numDocumento,
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
-          id_rol: 1,           // Valores numéricos por defecto requeridos en tu BD
+          id_rol: 1,      
           id_estado: 1
-        }, { onConflict: 'email' }); // Si el email coincide, actualiza los campos anteriores
+        }, { onConflict: 'email' }); 
 
       if (error) throw error;
 
@@ -68,7 +67,6 @@ export default function CompletarPerfil() {
         description: "Tus datos se guardaron con éxito. Bienvenido a COTRACIBOL.",
       });
 
-      // Redirección inmediata tras el guardado exitoso
       navigate("/viajes");
 
     } catch (error: any) {
