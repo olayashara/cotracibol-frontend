@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   CAPACIDAD_BUSETA, CAPACIDAD_TAXI, HORARIOS_BUSETA, HORARIOS_TAXI,
@@ -51,6 +52,38 @@ const Viajes = () => {
     (data ?? []).forEach((v) => { map[v.hora.slice(0, 5)] = v.cupos_disponibles; });
     setCuposPorHora(map);
   };
+
+  // --- NUEVO EFECTO: Guardián de seguridad para validar el perfil ---
+  useEffect(() => {
+    const verificarPerfilObligatorio = async () => {
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        
+        if (currentUser) {
+          // Consultamos de forma segura usando un bypass genérico de TypeScript
+          const queryBase = supabase.from("persona" as any) as any;
+          const { data: perfiles, error } = await queryBase
+            .select("num_documento")
+            .eq("id", currentUser.id);
+
+          if (error) throw error;
+
+          const perfilUsuario = perfiles && perfiles.length > 0 ? perfiles[0] : null;
+
+          // Si el registro existe pero no posee número de documento, va al flujo de onboarding
+          if (!perfilUsuario || !perfilUsuario.num_documento) {
+            console.log("Perfil incompleto detectado. Redirigiendo a /completar-perfil");
+            nav("/completar-perfil");
+          }
+        }
+      } catch (error) {
+        console.error("Error validando el perfil de usuario:", error);
+      }
+    };
+
+    verificarPerfilObligatorio();
+  }, [nav]);
+  // -----------------------------------------------------------------
 
   useEffect(() => {
     let cancel = false;
