@@ -12,7 +12,7 @@ export default function CompletarPerfil() {
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
 
-  // NUEVOS: Campos manuales de Nombre y Apellido
+  // Campos manuales de Nombre y Apellidos (en plural)
   const [nombre, setNombre] = useState("");
   const [apellidos, setApellidos] = useState("");
 
@@ -48,7 +48,7 @@ export default function CompletarPerfil() {
       return;
     }
 
-    // RESTRICCIÓN DE MENORES DE EDAD (Nacidos desde el 1 de enero de 2008 hacia atrás)
+    // RESTRICCIÓN DE MENORES DE EDAD (Solo nacidos hasta el 1 de enero de 2008)
     const fechaSeleccionada = new Date(fechaNacimiento);
     const fechaLimite = new Date("2008-01-01");
 
@@ -66,19 +66,19 @@ export default function CompletarPerfil() {
 
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Realizamos el UPSERT enviando tus campos manuales limpios
+      // Realizamos el UPSERT mapeando "apellidos" exactamente como está en tu base de datos
       const { error } = await queryBase
         .upsert({
-          id: userId,          
-          email: userEmail,    
+          // Se omite el 'id' para evitar el conflicto con el tipo entero (integer)
+          email: userEmail,    // Clave única para hacer la coincidencia y actualizar
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
           num_documento: numDocumento,
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
           id_rol: 1,           
           id_estado: 1,
-          nombre: nombre,       // <-- Manual desde el input
-          apellidos: apellidos    // <-- Manual desde el input
+          nombre: nombre,       
+          apellidos: apellidos  // <-- Corregido en plural para Supabase
         }, { onConflict: 'email' }); 
 
       if (error) throw error;
@@ -132,7 +132,7 @@ export default function CompletarPerfil() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* INPUT DE NOMBRE MANUAL */}
+            {/* INPUT DE NOMBRE */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Nombre Completo</label>
               <Input 
@@ -144,7 +144,7 @@ export default function CompletarPerfil() {
               />
             </div>
 
-            {/* INPUT DE APELLIDO MANUAL */}
+            {/* INPUT DE APELLIDOS */}
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Apellidos</label>
               <Input 
@@ -162,7 +162,7 @@ export default function CompletarPerfil() {
                 <select 
                   value={tipoDocumento} 
                   onChange={(e) => setTipoDocumento(e.target.value)}
-                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <option value="">Seleccione...</option>
                   <option value="CC">Cédula de Ciudadanía</option>
