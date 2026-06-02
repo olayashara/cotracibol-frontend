@@ -12,7 +12,11 @@ export default function CompletarPerfil() {
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
 
-  // Campos del formulario
+  // NUEVOS: Campos manuales de Nombre y Apellido
+  const [nombre, setNombre] = useState("");
+  const [apellido, setApellido] = useState("");
+
+  // Campos del formulario existentes
   const [tipoDocumento, setTipoDocumento] = useState("");
   const [numDocumento, setNumDocumento] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -34,11 +38,25 @@ export default function CompletarPerfil() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!tipoDocumento || !numDocumento || !telefono || !fechaNacimiento) {
+    // Validamos que TODOS los campos manuales estén llenos
+    if (!nombre || !apellido || !tipoDocumento || !numDocumento || !telefono || !fechaNacimiento) {
       toast({
         variant: "destructive",
         title: "Campos incompletos",
         description: "Por favor, llena todos los datos obligatorios para continuar.",
+      });
+      return;
+    }
+
+    // RESTRICCIÓN DE MENORES DE EDAD (Nacidos desde el 1 de enero de 2008 hacia atrás)
+    const fechaSeleccionada = new Date(fechaNacimiento);
+    const fechaLimite = new Date("2008-01-01");
+
+    if (fechaSeleccionada > fechaLimite) {
+      toast({
+        variant: "destructive",
+        title: "Registro no permitido",
+        description: "No se pueden registrar menores de edad.",
       });
       return;
     }
@@ -48,16 +66,19 @@ export default function CompletarPerfil() {
 
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Al apagar RLS, podemos guardar de forma segura usando solo el email
+      // Realizamos el UPSERT enviando tus campos manuales limpios
       const { error } = await queryBase
         .upsert({
-          email: userEmail, 
+          id: userId,          
+          email: userEmail,    
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
           num_documento: numDocumento,
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
-          id_rol: 1,      
-          id_estado: 1
+          id_rol: 1,           
+          id_estado: 1,
+          nombre: nombre,       // <-- Manual desde el input
+          apellido: apellido    // <-- Manual desde el input
         }, { onConflict: 'email' }); 
 
       if (error) throw error;
@@ -81,93 +102,108 @@ export default function CompletarPerfil() {
   };
 
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
-      {/* SECCIÓN IZQUIERDA: Estética Verde Degradada */}
-      <div className="bg-gradient-to-br from-green-700 via-green-600 to-yellow-500 text-white p-12 flex flex-col justify-between hidden md:flex">
+    <div className="min-h-screen grid lg:grid-cols-2">
+      {/* Columna Izquierda Estética */}
+      <div className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-b from-green-700 to-green-900 text-white">
         <div className="flex items-center gap-3">
-          <div className="bg-white p-2 rounded-full w-12 h-12 flex items-center justify-center shadow-md">
-            <span className="text-green-700 font-bold text-xl">C</span>
-          </div>
+          <div className="w-10 h-10 rounded-full bg-white text-green-800 flex items-center justify-center font-bold text-xl">C</div>
           <div>
-            <h2 className="font-bold tracking-wider text-lg">COTRACIBOL</h2>
-            <p className="text-xs text-green-200 uppercase tracking-widest">Ciudad Bolívar - Medellín</p>
+            <h1 className="font-bold tracking-wider text-sm">COTRACIBOL</h1>
+            <p className="text-xs text-green-200">CIUDAD BOLÍVAR - MEDELLÍN</p>
           </div>
         </div>
-
-        <div className="space-y-4 max-w-md mb-20">
-          <h1 className="text-5xl font-extrabold leading-tight">Queremos conocerte.</h1>
-          <p className="text-lg text-green-50">
+        <div className="space-y-6 max-w-md">
+          <h2 className="text-5xl font-extrabold tracking-tight leading-none">Queremos conocerte.</h2>
+          <p className="text-green-100 text-lg">
             Completa tus datos de identificación para poder gestionar tus tiquetes y asegurar tus próximos viajes de forma legal.
           </p>
         </div>
-
-        <p className="text-sm text-green-200">© 2026 COTRACIBOL</p>
+        <p className="text-xs text-green-300">© 2026 COTRACIBOL</p>
       </div>
 
-      {/* SECCIÓN DERECHA: Formulario Estilizado */}
-      <div className="bg-slate-50 flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 relative overflow-y-auto">
-        <div className="max-w-md w-full mx-auto space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+      {/* Columna Derecha - Formulario */}
+      <div className="flex items-center justify-center p-6 sm:p-12 bg-slate-50">
+        <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-sm border border-slate-100 space-y-6">
           <div>
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Casi listo</h2>
-            <p className="text-sm text-slate-500 mt-2">
-              Registrado como <span className="font-semibold text-green-600">{userEmail}</span>. Por favor completa la siguiente información.
+            <h3 className="text-3xl font-black text-slate-800">Casi listo</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Registrado como <span className="font-medium text-green-600">{userEmail}</span>. Por favor completa la siguiente información.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tipo de documento</label>
-                <select
-                  value={tipoDocumento}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* INPUT DE NOMBRE MANUAL */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Nombre Completo</label>
+              <Input 
+                type="text" 
+                placeholder="Ej. Juan Carlos" 
+                value={nombre} 
+                onChange={(e) => setNombre(e.target.value)} 
+                className="h-11"
+              />
+            </div>
+
+            {/* INPUT DE APELLIDO MANUAL */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Apellidos</label>
+              <Input 
+                type="text" 
+                placeholder="Ej. Pérez Gómez" 
+                value={apellido} 
+                onChange={(e) => setApellido(e.target.value)} 
+                className="h-11"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Tipo de Documento</label>
+                <select 
+                  value={tipoDocumento} 
                   onChange={(e) => setTipoDocumento(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="">Selecciona</option>
+                  <option value="">Seleccione...</option>
                   <option value="CC">Cédula de Ciudadanía</option>
                   <option value="CE">Cédula de Extranjería</option>
                 </select>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Número de documento</label>
-                <Input
-                  type="text"
-                  placeholder="Ej: 1023456"
-                  value={numDocumento}
-                  onChange={(e) => setNumDocumento(e.target.value)}
-                  className="rounded-lg border-slate-200 p-2.5"
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Número de Documento</label>
+                <Input 
+                  type="text" 
+                  placeholder="12345678" 
+                  value={numDocumento} 
+                  onChange={(e) => setNumDocumento(e.target.value)} 
+                  className="h-11"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Teléfono de contacto</label>
-              <Input
-                type="tel"
-                placeholder="Ej: 3123456789"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                className="rounded-lg border-slate-200 p-2.5"
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Teléfono de Contacto</label>
+              <Input 
+                type="tel" 
+                placeholder="3001234567" 
+                value={telefono} 
+                onChange={(e) => setTelefono(e.target.value)} 
+                className="h-11"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Fecha de nacimiento</label>
-              <Input
-                type="date"
-                value={fechaNacimiento}
-                onChange={(e) => setFechaNacimiento(e.target.value)}
-                className="rounded-lg border-slate-200 p-2.5 text-slate-600"
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block mb-1">Fecha de Nacimiento</label>
+              <Input 
+                type="date" 
+                value={fechaNacimiento} 
+                onChange={(e) => setFechaNacimiento(e.target.value)} 
+                className="h-11"
               />
             </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-3 rounded-lg transition-colors shadow-md mt-6"
-            >
-              {loading ? "Guardando datos..." : "Finalizar Registro"}
+            <Button type="submit" disabled={loading} className="w-full h-11 bg-green-700 hover:bg-green-800 font-bold text-white transition-colors mt-2">
+              {loading ? "Guardando..." : "Finalizar Registro"}
             </Button>
           </form>
         </div>
