@@ -13,6 +13,7 @@ import MisTiquetes from "./pages/MisTiquetes.tsx";
 import Notificaciones from "./pages/Notificaciones.tsx";
 import Conductor from "./pages/Conductor.tsx";
 import Admin from "./pages/Admin.tsx";
+import CompletarPerfil from "./pages/CompletarPerfil.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/notificaciones" element={<Protected><Notificaciones /></Protected>} />
             <Route path="/conductor" element={<Protected role="conductor"><Conductor /></Protected>} />
             <Route path="/admin" element={<Protected role="administrador"><Admin /></Protected>} />
+            <Route path="/completar-perfil" element={<CompletarPerfil />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
