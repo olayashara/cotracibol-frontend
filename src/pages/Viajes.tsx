@@ -26,7 +26,6 @@ type Tipo = "taxi" | "buseta";
 const CIUDADES = ["Medellín", "Ciudad Bolívar"] as const;
 type Ciudad = (typeof CIUDADES)[number];
 
-// Interfaz para estructurar los viajes dinámicos desde tbl_viaje
 interface ViajeBD {
   id: number;
   id_ruta: number;
@@ -46,17 +45,16 @@ const Viajes = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [tipo, setTipo] = useState<Tipo>("buseta");
   
-  // Guardaremos los viajes recuperados de la base de datos aquí
   const [viajesFiltrados, setViajesFiltrados] = useState<ViajeBD[]>([]);
   const [loading, setLoading] = useState(false);
   const [comprandoId, setComprandoId] = useState<number | null>(null);
 
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
 
-  // Mapeo estático de las capacidades del vehículo
+  // Capacidad máxima adaptada al modelo real (Buseta: 8, Taxi: 4)
   const capacidadMax = tipo === "buseta" ? 8 : 4; 
 
-  // --- 1. GUARDÍAN DE SEGURIDAD CORREGIDO POR EMAIL Y APELLIDOS EN PLURAL ---
+  // --- 1. GUARDÍAN DE SEGURIDAD ---
   useEffect(() => {
     const verificarYCrearPerfil = async () => {
       try {
@@ -65,19 +63,17 @@ const Viajes = () => {
         if (currentUser && currentUser.email) {
           const queryBase = supabase.from("tbl_persona" as any) as any;
           
-          // Buscamos por EMAIL en lugar de ID para evitar conflictos de tipo de dato
           const { data: perfiles } = await queryBase
             .select("num_documento")
             .eq("email", currentUser.email);
 
           const perfilUsuario = perfiles && perfiles.length > 0 ? perfiles[0] : null;
 
-          // Si NO existe el registro con ese email, lo creamos asignando por defecto
           if (!perfiles || perfiles.length === 0) {
             console.log("El usuario no existe en tbl_persona. Creándolo por email...");
             await queryBase.insert({
               nombre: currentUser.user_metadata?.full_name || currentUser.user_metadata?.given_name || "Usuario",
-              apellidos: currentUser.user_metadata?.family_name || "", // <-- Corregido a plural para Supabase
+              apellidos: currentUser.user_metadata?.family_name || "",
               email: currentUser.email,
               id_rol: 1, 
               id_estado: 1
@@ -86,7 +82,6 @@ const Viajes = () => {
             return;
           }
 
-          // Si existe pero no tiene cédula, lo mandamos a completar datos
           if (!perfilUsuario || !perfilUsuario.num_documento) {
             console.log("Perfil incompleto detectado. Redirigiendo a /completar-perfil");
             nav("/completar-perfil");
@@ -100,12 +95,11 @@ const Viajes = () => {
     verificarYCrearPerfil();
   }, [nav]);
 
-  // --- 2. EFECTO PARA CARGAR LOS VIAJES REALES DESDE SUPABASE ---
+  // --- 2. EFECTO PARA CARGAR LOS VIAJES REALES ---
   useEffect(() => {
     const consultarViajesDisponibles = async () => {
       setLoading(true);
       try {
-        // Consultamos la tabla real de viajes activos (id_estado = 1)
         const { data, error } = await supabase
           .from("tbl_viaje" as any)
           .select("*")
@@ -113,20 +107,23 @@ const Viajes = () => {
 
         if (error) throw error;
 
-        // SOLUCIÓN AL ERROR DE TYPESCRIPT: Forzamos el casteo con '(data as any)'
         const listaViajes: ViajeBD[] = (data as any) || [];
 
-        // Filtramos localmente por la fecha seleccionada (formato YYYY-MM-DD)
         const filtrados = listaViajes.filter((v) => {
-          const fechaViaje = v.hora_salida.split("T")[0];
+          // Solución al problema de Zona Horaria: Convertimos el string ISO a un objeto Date local
+          const fechaLocalViaje = new Date(v.hora_salida);
+          const anio = fechaLocalViaje.getFullYear();
+          const mes = String(fechaLocalViaje.getMonth() + 1).padStart(2, "0");
+          const dia = String(fechaLocalViaje.getDate()).padStart(2, "0");
+          const fechaViajeFormateada = `${anio}-${mes}-${dia}`;
           
-          // Mapeamos el tipo de vehículo: id_vehiculo = 1 es Buseta, id_vehiculo = 2 es Taxi
+          // Filtro por tipo de vehículo (id_vehiculo = 1 es Buseta, id_vehiculo = 2 es Taxi)
           const coincideVehiculo = tipo === "buseta" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
           
-          // Mapeamos tu id_ruta de prueba (Ruta #1: Medellín - Ciudad Bolívar o viceversa)
-          const coincideRuta = v.id_ruta === 1; 
+          // Filtro por fecha exacta seleccionada en la web
+          const coincideFecha = fechaViajeFormateada === fechaStr;
 
-          return fechaViaje === fechaStr && coincideVehiculo && coincideRuta;
+          return coincideFecha && coincideVehiculo;
         });
 
         setViajesFiltrados(filtrados);
@@ -142,7 +139,7 @@ const Viajes = () => {
     consultarViajesDisponibles();
   }, [fechaStr, tipo, origen, destino]);
 
-  // --- 3. LÓGICA DE COMPRA REAL INTEGRADA CON EL TRIGGER ---
+  // --- 3. LÓGICA DE COMPRA ---
   const handleComprarReal = async (viajeId: number, asientosDisponibles: number) => {
     if (!user) { 
       nav("/auth"); 
@@ -156,22 +153,18 @@ const Viajes = () => {
 
     try {
       setComprandoId(viajeId);
-
       const queryTiquete = supabase.from("tbl_tiquete" as any) as any;
 
-      // Insertamos la compra en tbl_tiquete.
-      // ¡Tu disparador automático restará de inmediato el puesto en tbl_viaje!
       const { error } = await queryTiquete.insert({
         id_viaje: viajeId,
         email_pasajero: user.email,
-        asientos_comprados: 1 // Por defecto compra 1 asiento
+        asientos_comprados: 1
       });
 
       if (error) throw error;
 
       toast.success("¡Tiquete adquirido con éxito! Buen viaje.");
 
-      // Actualizamos los asientos libres en la pantalla en tiempo real sin recargar
       setViajesFiltrados((prev) =>
         prev.map((v) => (v.id === viajeId ? { ...v, asientos_disponibles: v.asientos_disponibles - 1 } : v))
       );
@@ -276,7 +269,7 @@ const Viajes = () => {
                 ) : (
                   viajesFiltrados.map((viaje) => {
                     const lleno = viaje.asientos_disponibles <= 0;
-                    // Extraemos los caracteres de la hora del timestamp (ej: 10:00)
+                    // Extraemos los caracteres de la hora del string original de forma segura (ej: 10:00)
                     const horaFormateada = viaje.hora_salida.split("T")[1]?.slice(0, 5) || "00:00";
 
                     return (
