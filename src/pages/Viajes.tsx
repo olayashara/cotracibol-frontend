@@ -95,7 +95,7 @@ const Viajes = () => {
     verificarYCrearPerfil();
   }, [nav]);
 
-  // --- 2. EFECTO PARA CARGAR LOS VIAJES REALES ---
+  // --- 2. EFECTO PARA CARGAR LOS VIAJES REALES DESDE SUPABASE ---
   useEffect(() => {
     const consultarViajesDisponibles = async () => {
       setLoading(true);
@@ -110,7 +110,7 @@ const Viajes = () => {
         const listaViajes: ViajeBD[] = (data as any) || [];
 
         const filtrados = listaViajes.filter((v) => {
-          // Solución al problema de Zona Horaria: Convertimos el string ISO a un objeto Date local
+          // Normalización inteligente de fecha extrayendo la zona horaria local de Colombia
           const fechaLocalViaje = new Date(v.hora_salida);
           const anio = fechaLocalViaje.getFullYear();
           const mes = String(fechaLocalViaje.getMonth() + 1).padStart(2, "0");
@@ -139,7 +139,7 @@ const Viajes = () => {
     consultarViajesDisponibles();
   }, [fechaStr, tipo, origen, destino]);
 
-  // --- 3. LÓGICA DE COMPRA ---
+  // --- 3. LÓGICA DE COMPRA REAL INTEGRADA CON REDIRECCIÓN A PAGO Y HISTORIAL ---
   const handleComprarReal = async (viajeId: number, asientosDisponibles: number) => {
     if (!user) { 
       nav("/auth"); 
@@ -155,6 +155,7 @@ const Viajes = () => {
       setComprandoId(viajeId);
       const queryTiquete = supabase.from("tbl_tiquete" as any) as any;
 
+      // 1. Insertamos el registro en tbl_tiquete (Habilitando su visualización instantánea en Mis Tiquetes)
       const { error } = await queryTiquete.insert({
         id_viaje: viajeId,
         email_pasajero: user.email,
@@ -163,14 +164,28 @@ const Viajes = () => {
 
       if (error) throw error;
 
-      toast.success("¡Tiquete adquirido con éxito! Buen viaje.");
+      toast.success("¡Tiquete reservado con éxito! Redirigiendo a la pasarela de pago...");
 
+      // Actualizamos visualmente el frontend local de inmediato
       setViajesFiltrados((prev) =>
         prev.map((v) => (v.id === viajeId ? { ...v, asientos_disponibles: v.asientos_disponibles - 1 } : v))
       );
 
+      // Buscamos el viaje actual para pasar sus variables de contexto económico
+      const viajeSeleccionado = viajesFiltrados.find(v => v.id === viajeId);
+      
+      // 2. Redirección diferida a la pantalla de Pago enviando los metadatos en el state del Router
+      setTimeout(() => {
+        nav("/pago", { 
+          state: { 
+            viajeId: viajeId, 
+            precio: viajeSeleccionado?.precio || 0 
+          } 
+        });
+      }, 1500);
+
     } catch (error: any) {
-      toast.error(error.message || "No se pudo completar la compra.");
+      toast.error(error.message || "No se pudo procesar la reserva.");
     } finally {
       setComprandoId(null);
     }
@@ -269,7 +284,6 @@ const Viajes = () => {
                 ) : (
                   viajesFiltrados.map((viaje) => {
                     const lleno = viaje.asientos_disponibles <= 0;
-                    // Extraemos los caracteres de la hora del string original de forma segura (ej: 10:00)
                     const horaFormateada = viaje.hora_salida.split("T")[1]?.slice(0, 5) || "00:00";
 
                     return (
