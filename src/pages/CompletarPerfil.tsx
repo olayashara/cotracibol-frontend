@@ -14,7 +14,7 @@ export default function CompletarPerfil() {
 
   // NUEVOS: Campos manuales de Nombre y Apellido
   const [nombre, setNombre] = useState("");
-  const [apellido, setApellido] = useState("");
+  const [apellidos, setApellidos] = useState("");
 
   // Campos del formulario existentes
   const [tipoDocumento, setTipoDocumento] = useState("");
@@ -39,7 +39,7 @@ export default function CompletarPerfil() {
     e.preventDefault();
 
     // Validamos que TODOS los campos manuales estén llenos
-    if (!nombre || !apellido || !tipoDocumento || !numDocumento || !telefono || !fechaNacimiento) {
+    if (!nombre || !apellidos || !tipoDocumento || !numDocumento || !telefono || !fechaNacimiento) {
       toast({
         variant: "destructive",
         title: "Campos incompletos",
@@ -78,7 +78,7 @@ export default function CompletarPerfil() {
           id_rol: 1,           
           id_estado: 1,
           nombre: nombre,       // <-- Manual desde el input
-          apellido: apellido    // <-- Manual desde el input
+          apellidos: apellidos    // <-- Manual desde el input
         }, { onConflict: 'email' }); 
 
       if (error) throw error;
@@ -150,8 +150,8 @@ export default function CompletarPerfil() {
               <Input 
                 type="text" 
                 placeholder="Ej. Pérez Gómez" 
-                value={apellido} 
-                onChange={(e) => setApellido(e.target.value)} 
+                value={apellidos} 
+                onChange={(e) => setApellidos(e.target.value)} 
                 className="h-11"
               />
             </div>
