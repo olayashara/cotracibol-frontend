@@ -14,7 +14,7 @@ export const Footer = () => (
       <div>
         <h4 className="font-semibold mb-3 text-sm uppercase tracking-wider">Contacto</h4>
         <ul className="space-y-3 text-sm text-muted-foreground">
-          <li className="flex items-start gap-2"><Phone className="h-4 w-4 mt-0.5 text-primary" /> +57 604 841 0000</li>
+          <li className="flex items-start gap-2"><Phone className="h-4 w-4 mt-0.5 text-primary" /> +57 300 914 3789</li>
           <li className="flex items-start gap-2"><Mail className="h-4 w-4 mt-0.5 text-primary" /> info@cotracibol.co</li>
           <li className="flex items-start gap-2"><Clock className="h-4 w-4 mt-0.5 text-primary" /> Lun–Dom · 5:30 a.m. – 7:00 p.m.</li>
         </ul>
@@ -26,7 +26,7 @@ export const Footer = () => (
             Terminal Sur · Medellín
           </li>
           <li className="flex items-start gap-2"><MapPin className="h-4 w-4 mt-0.5 text-primary" />
-            Parque Principal · Ciudad Bolívar, Antioquia
+            Calle Sexta, Zona Rosa · Ciudad Bolívar, Antioquia
           </li>
         </ul>
       </div>
