@@ -46,10 +46,10 @@ export default function CompletarPerfil() {
     try {
       setLoading(true);
 
-      // Solución al error de TypeScript: Rompemos el tipado asignando la tabla a una consulta genérica
+      // Apuntamos a la tabla correcta
       const queryBase = supabase.from("tbl_persona" as any) as any;
 
-      // Realizamos la actualización de forma directa
+      // Actualizamos la fila buscando por el correo electrónico del usuario
       const { error } = await queryBase
         .update({
           id_tipo_documento: tipoDocumento === "CC" ? 1 : 2,
@@ -57,7 +57,7 @@ export default function CompletarPerfil() {
           telefono: telefono,
           fecha_nacimiento: fechaNacimiento,
         })
-        .eq("id", userId);
+        .eq("email", userEmail); // <-- Cambiado de "id" a "email" para evitar el conflicto de tipos
 
       if (error) throw error;
 

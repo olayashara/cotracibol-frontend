@@ -53,39 +53,37 @@ const Viajes = () => {
     setCuposPorHora(map);
   };
 
- // --- GUARDÍAN DE SEGURIDAD ULTRA DEFINITIVO ---
+  // --- GUARDÍAN DE SEGURIDAD CORREGIDO POR EMAIL ---
   useEffect(() => {
     const verificarYCrearPerfil = async () => {
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         
-        if (currentUser) {
+        if (currentUser && currentUser.email) {
           const queryBase = supabase.from("tbl_persona" as any) as any;
           
-          // 1. Intentamos buscar si ya existe en la tabla persona
+          // 1. Buscamos por EMAIL en lugar de ID para evitar conflictos de tipo de dato
           const { data: perfiles } = await queryBase
             .select("num_documento")
-            .eq("id", currentUser.id);
+            .eq("email", currentUser.email);
 
           const perfilUsuario = perfiles && perfiles.length > 0 ? perfiles[0] : null;
 
-          // 2. Si NO existe el registro en la tabla, lo creamos nosotros mismos desde el frontend ya mismo
+          // 2. Si NO existe el registro con ese email, lo creamos
           if (!perfiles || perfiles.length === 0) {
-            console.log("El usuario no existe en la tabla persona. Creándolo ahora...");
+            console.log("El usuario no existe en tbl_persona. Creándolo por email...");
             await queryBase.insert({
-              id: currentUser.id,
               nombre: currentUser.user_metadata?.full_name || currentUser.user_metadata?.given_name || "Usuario",
               apellido: currentUser.user_metadata?.family_name || "",
               email: currentUser.email,
-              id_rol: 1,
+              id_role: 1, // Verifica si en tu BD se llama id_rol o id_role
               id_estado: 1
             });
-            // Como es totalmente nuevo, va directo a completar perfil
             nav("/completar-perfil");
             return;
           }
 
-          // 3. Si el registro existe pero le falta la cédula, lo desviamos
+          // 3. Si existe pero no tiene cédula, lo mandamos a completar datos
           if (!perfilUsuario || !perfilUsuario.num_documento) {
             console.log("Perfil incompleto detectado. Redirigiendo a /completar-perfil");
             nav("/completar-perfil");
