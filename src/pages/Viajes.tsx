@@ -53,35 +53,50 @@ const Viajes = () => {
     setCuposPorHora(map);
   };
 
-  // --- NUEVO EFECTO: Guardián de seguridad para validar el perfil ---
+ // --- GUARDÍAN DE SEGURIDAD ULTRA DEFINITIVO ---
   useEffect(() => {
-    const verificarPerfilObligatorio = async () => {
+    const verificarYCrearPerfil = async () => {
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         
         if (currentUser) {
-          // Consultamos de forma segura usando un bypass genérico de TypeScript
           const queryBase = supabase.from("persona" as any) as any;
-          const { data: perfiles, error } = await queryBase
+          
+          // 1. Intentamos buscar si ya existe en la tabla persona
+          const { data: perfiles } = await queryBase
             .select("num_documento")
             .eq("id", currentUser.id);
 
-          if (error) throw error;
-
           const perfilUsuario = perfiles && perfiles.length > 0 ? perfiles[0] : null;
 
-          // Si el registro existe pero no posee número de documento, va al flujo de onboarding
+          // 2. Si NO existe el registro en la tabla, lo creamos nosotros mismos desde el frontend ya mismo
+          if (!perfiles || perfiles.length === 0) {
+            console.log("El usuario no existe en la tabla persona. Creándolo ahora...");
+            await queryBase.insert({
+              id: currentUser.id,
+              nombre: currentUser.user_metadata?.full_name || currentUser.user_metadata?.given_name || "Usuario",
+              apellido: currentUser.user_metadata?.family_name || "",
+              email: currentUser.email,
+              id_rol: 1,
+              id_estado: 1
+            });
+            // Como es totalmente nuevo, va directo a completar perfil
+            nav("/completar-perfil");
+            return;
+          }
+
+          // 3. Si el registro existe pero le falta la cédula, lo desviamos
           if (!perfilUsuario || !perfilUsuario.num_documento) {
             console.log("Perfil incompleto detectado. Redirigiendo a /completar-perfil");
             nav("/completar-perfil");
           }
         }
       } catch (error) {
-        console.error("Error validando el perfil de usuario:", error);
+        console.error("Error en el guardián de seguridad:", error);
       }
     };
 
-    verificarPerfilObligatorio();
+    verificarYCrearPerfil();
   }, [nav]);
   // -----------------------------------------------------------------
 
