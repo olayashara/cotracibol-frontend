@@ -27,7 +27,9 @@ const Pago = () => {
 
   const viajeId = location.state?.viajeId || null;
   const precioFinal = location.state?.precio || 35000;
-  const idVehiculo = location.state?.idVehiculo || 1; // 1 = Buseta, 2 = Taxi
+  
+  // 🔄 CORRECCIÓN: Ahora idVehiculo === 2 significa Buseta, idVehiculo === 1 significa Taxi
+  const idVehiculo = location.state?.idVehiculo || 2; 
 
   const [card, setCard] = useState({ nombre: "", numero: "", expiracion: "", cvv: "" });
   const [procesando, setProcesando] = useState(false);
@@ -41,7 +43,8 @@ const Pago = () => {
 
   // 🛰️ Consultar asientos ocupados en tiempo real
   useEffect(() => {
-    if (!viajeId || idVehiculo !== 1) return;
+    // 🔄 Solo cargamos asientos si es Buseta (idVehiculo === 2)
+    if (!viajeId || idVehiculo !== 2) return;
 
     const cargarAsientosReservados = async () => {
       setCargandoAsientos(true);
@@ -58,7 +61,7 @@ const Pago = () => {
         }
       } catch (error) {
         console.error("Error obteniendo asientos:", error);
-      } {
+      } finally {
         setCargandoAsientos(false);
       }
     };
@@ -72,7 +75,8 @@ const Pago = () => {
     e.preventDefault();
     if (procesando || pagado) return;
 
-    if (idVehiculo === 1 && !asientoSeleccionado) {
+    // 🔄 Exigir asiento si es Buseta (idVehiculo === 2)
+    if (idVehiculo === 2 && !asientoSeleccionado) {
       toast.error("Por favor, selecciona tu asiento en el mapa de la buseta.");
       return;
     }
@@ -83,14 +87,12 @@ const Pago = () => {
 
     setProcesando(true);
     try {
-      // 1. Validar inventario
       const { data: viajeActual, error: errorFetch } = await supabase
         .from("tbl_viaje" as any).select("asientos_disponibles").eq("id", viajeId).single() as any;
 
       if (errorFetch || !viajeActual) throw new Error("No se pudo verificar disponibilidad.");
       if (viajeActual.asientos_disponibles <= 0) throw new Error("¡El viaje ya no cuenta con cupos!");
 
-      // 2. Descontar cupo
       const { error: errorUpdate } = await supabase
         .from("tbl_viaje" as any)
         .update({ asientos_disponibles: viajeActual.asientos_disponibles - 1 } as any)
@@ -98,18 +100,17 @@ const Pago = () => {
 
       if (errorUpdate) throw new Error("Error actualizando cupos.");
 
-      // 3. Insertar tiquete con la nueva columna num_asiento
       const { error: errorTiquete } = await supabase
         .from("tbl_tiquete" as any)
         .insert({
           id_viaje: viajeId,
           email_pasajero: user.email,
           asientos_comprados: 1,
-          num_asiento: idVehiculo === 1 ? asientoSeleccionado : null
+          // 🔄 Guardamos asiento si es buseta
+          num_asiento: idVehiculo === 2 ? asientoSeleccionado : null
         } as any);
 
       if (errorTiquete) {
-        // Rollback defensivo
         await supabase.from("tbl_viaje" as any).update({ asientos_disponibles: viajeActual.asientos_disponibles } as any).eq("id", viajeId);
         throw new Error("Error guardando el tiquete oficial.");
       }
@@ -165,7 +166,8 @@ const Pago = () => {
         ) : (
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 mt-8">
             <div className="space-y-6">
-              {idVehiculo === 1 && (
+              {/* 🔄 El croquis se renderiza si es Buseta (idVehiculo === 2) */}
+              {idVehiculo === 2 && (
                 <div className="p-6 rounded-2xl bg-card border shadow-sm">
                   <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><Bus className="text-primary" /> Croquis Real de la Buseta</h3>
                   
@@ -247,7 +249,12 @@ const Pago = () => {
                 <MapPin className="text-primary h-4 w-4" /> Ruta Cooperativa COTRACIBOL
               </div>
               <p className="mt-2 text-lg font-bold capitalize">{fechaLegible}</p>
-              {asientoSeleccionado && (
+              
+              <div className="mt-2 text-xs font-semibold px-2 py-1 bg-slate-200 text-slate-800 rounded w-fit capitalize">
+                {idVehiculo === 2 ? "Servicio Buseta" : "Servicio Taxi"}
+              </div>
+
+              {idVehiculo === 2 && asientoSeleccionado && (
                 <div className="mt-3 text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-lg font-mono">
                   Asiento Seleccionado: <strong>#{asientoSeleccionado}</strong>
                 </div>

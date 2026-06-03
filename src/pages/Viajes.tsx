@@ -48,7 +48,9 @@ const Viajes = () => {
   const [loading, setLoading] = useState(false);
 
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
-  const capacidadMax = tipo === "buseta" ? 8 : 4; 
+  
+  // 🚖 ASIGNACIÓN DE CAPACIDADES SEGÚN TU BASE DE DATOS: ID 1 es Taxi (4 cupos), ID 2 es Buseta (8 cupos)
+  const capacidadMax = tipo === "taxi" ? 4 : 8; 
 
   useEffect(() => {
     const verificarYCrearPerfil = async () => {
@@ -95,7 +97,8 @@ const Viajes = () => {
           const dia = String(fechaLocalViaje.getDate()).padStart(2, "0");
           const fechaViajeFormateada = `${anio}-${mes}-${dia}`;
           
-          const coincideVehiculo = tipo === "buseta" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
+          // 🔄 CORRECCIÓN DE MAPEO DE ID: v.id_vehiculo === 1 es TAXI, v.id_vehiculo === 2 es BUSETA
+          const coincideVehiculo = tipo === "taxi" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
           const coincideFecha = fechaViajeFormateada === fechaStr;
           return coincideFecha && coincideVehiculo;
         });
@@ -117,8 +120,8 @@ const Viajes = () => {
       toast.error("Este viaje se encuentra lleno.");
       return;
     }
-    // Redirige directamente transfiriendo los datos del viaje
-    nav("/pago", { state: { viajeId, precio, idVehiculo: tipo === "buseta" ? 1 : 2 } });
+    // 🔄 CORRECCIÓN AL REDIRIGIR: Mandamos idVehiculo 1 si es Taxi, 2 si es Buseta
+    nav("/pago", { state: { viajeId, precio, idVehiculo: tipo === "taxi" ? 1 : 2 } });
   };
 
   return (
@@ -194,7 +197,7 @@ const Viajes = () => {
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {viajesFiltrados.length === 0 ? (
                   <p className="text-muted-foreground col-span-full text-center py-10 bg-slate-50 border border-dashed rounded-2xl">
-                    No se encontraron viajes programados para hoy.
+                    No se encontraron viajes programados para este tipo de vehículo hoy.
                   </p>
                 ) : (
                   viajesFiltrados.map((viaje) => {
