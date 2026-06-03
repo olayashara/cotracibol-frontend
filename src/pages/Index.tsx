@@ -40,8 +40,12 @@ const Index = () => {
           <div className="hidden md:flex justify-center">
             <div className="relative">
               <div className="absolute inset-0 blur-3xl bg-secondary/40 rounded-full" />
-              <img src={logo} alt="Logo COTRACIBOL"
-                className="relative w-[380px] h-[380px] drop-shadow-2xl animate-[spin_60s_linear_infinite]" />
+              {/* Modificado: Se eliminó la animación de giro para dejar el logo estático */}
+              <img 
+                src={logo} 
+                alt="Logo COTRACIBOL"
+                className="relative w-[380px] h-[380px] drop-shadow-2xl object-contain select-none" 
+              />
             </div>
           </div>
         </div>
