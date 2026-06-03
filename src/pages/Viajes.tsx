@@ -39,6 +39,8 @@ interface ViajeBD {
 const Viajes = () => {
   const { user } = useAuth();
   const nav = useNavigate();
+  
+  // Estado de origen (Por defecto Medellín)
   const [origen, setOrigen] = useState<Ciudad>("Medellín");
   const destino = useMemo<Ciudad>(() => (origen === "Medellín" ? "Ciudad Bolívar" : "Medellín"), [origen]);
   const [date, setDate] = useState<Date>(new Date());
@@ -49,8 +51,15 @@ const Viajes = () => {
 
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
   
-  // 🚖 ASIGNACIÓN DE CAPACIDADES SEGÚN TU BASE DE DATOS: ID 1 es Taxi (4 cupos), ID 2 es Buseta (8 cupos)
+  // 🚖 Asignación de capacidades físicas reales: ID 1 es Taxi (4 cupos), ID 2 es Buseta (8 cupos)
   const capacidadMax = tipo === "taxi" ? 4 : 8; 
+
+  // Mapear la ruta seleccionada con los IDs reales de tbl_ruta en Supabase
+  const idRutaSeleccionada = useMemo(() => {
+    // Si el origen es Medellín rumbo a Ciudad Bolívar => ID 2
+    // Si el origen es Ciudad Bolívar rumbo a Medellín => ID 1
+    return origen === "Medellín" ? 2 : 1;
+  }, [origen]);
 
   useEffect(() => {
     const verificarYCrearPerfil = async () => {
@@ -97,10 +106,15 @@ const Viajes = () => {
           const dia = String(fechaLocalViaje.getDate()).padStart(2, "0");
           const fechaViajeFormateada = `${anio}-${mes}-${dia}`;
           
-          // 🔄 CORRECCIÓN DE MAPEO DE ID: v.id_vehiculo === 1 es TAXI, v.id_vehiculo === 2 es BUSETA
+          // 🔄 NUEVO FILTRO COMPLETO:
+          // 1. Validar Tipo Vehículo (1: Taxi, 2: Buseta)
           const coincideVehiculo = tipo === "taxi" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
+          // 2. Validar Fecha exacta
           const coincideFecha = fechaViajeFormateada === fechaStr;
-          return coincideFecha && coincideVehiculo;
+          // 3. Validar Ruta correspondiente (Evita que salgan en la ruta inversa)
+          const coincideRuta = v.id_ruta === idRutaSeleccionada;
+
+          return coincideFecha && coincideVehiculo && coincideRuta;
         });
 
         setViajesFiltrados(filtrados);
@@ -112,7 +126,7 @@ const Viajes = () => {
       }
     };
     consultarViajesDisponibles();
-  }, [fechaStr, tipo, origen, destino]);
+  }, [fechaStr, tipo, idRutaSeleccionada]); // Agregado idRutaSeleccionada como dependencia estable
 
   const handleIrAlPago = (viajeId: number, asientosDisponibles: number, precio: number) => {
     if (!user) { nav("/auth"); return; }
@@ -120,7 +134,6 @@ const Viajes = () => {
       toast.error("Este viaje se encuentra lleno.");
       return;
     }
-    // 🔄 CORRECCIÓN AL REDIRIGIR: Mandamos idVehiculo 1 si es Taxi, 2 si es Buseta
     nav("/pago", { state: { viajeId, precio, idVehiculo: tipo === "taxi" ? 1 : 2 } });
   };
 
@@ -197,7 +210,7 @@ const Viajes = () => {
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {viajesFiltrados.length === 0 ? (
                   <p className="text-muted-foreground col-span-full text-center py-10 bg-slate-50 border border-dashed rounded-2xl">
-                    No se encontraron viajes programados para este tipo de vehículo hoy.
+                    No se encontraron viajes programados para esta ruta y vehículo en la fecha seleccionada.
                   </p>
                 ) : (
                   viajesFiltrados.map((viaje) => {
