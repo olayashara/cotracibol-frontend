@@ -40,21 +40,27 @@ const Pago = () => {
   if (!user) return <Navigate to="/auth" replace />;
 
   const handlePagar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
-    if (!parsed.success) {
-      toast.error(parsed.error.errors[0].message);
-      return;
-    }
+  e.preventDefault();
+  
+  // 🛡️ CONTROL ANTIDOBLE CLIC: Si ya está procesando, frena el segundo intento de inmediato
+  if (procesando || pagado) return;
 
-    if (!viajeId) {
-      toast.error("No se encontró una referencia de viaje válida.");
-      return;
-    }
+  const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
+  if (!parsed.success) {
+    toast.error(parsed.error.errors[0].message);
+    return;
+  }
 
-    setProcesando(true);
-    try {
+  if (!viajeId) {
+    toast.error("No se encontró una referencia de viaje válida.");
+    return;
+  }
+
+  // Activamos el cargando inmediatamente
+  setProcesando(true);
+  
+  try {
+    // ... (aquí va todo el resto de tu código de Supabase igual)
       await new Promise((r) => setTimeout(r, 1800));
 
       const { data, error: errorFetch } = await supabase
