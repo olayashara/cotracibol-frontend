@@ -27,8 +27,6 @@ const Pago = () => {
 
   const viajeId = location.state?.viajeId || null;
   const precioFinal = location.state?.precio || 35000;
-  
-  // ID 1 = Taxi, ID 2 = Buseta según la estructura real de tu Base de Datos
   const idVehiculo = location.state?.idVehiculo || 2; 
 
   const [card, setCard] = useState({ nombre: "", numero: "", expiracion: "", cvv: "" });
@@ -41,7 +39,6 @@ const Pago = () => {
 
   const fechaLegible = useMemo(() => format(new Date(), "EEEE, d 'de' MMMM", { locale: es }), []);
 
-  // Consultar asientos ocupados en tiempo real si el vehículo es una Buseta (ID: 2)
   useEffect(() => {
     if (!viajeId || idVehiculo !== 2) return;
 
@@ -70,22 +67,19 @@ const Pago = () => {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
 
+  // CORRECCIÓN PROFUNDA: Esta es la función encargada de procesar la compra
   const handlePagar = async (e: React.FormEvent) => {
-    // 1. Evitar comportamiento por defecto del navegador inmediatamente
     e.preventDefault();
     
-    // 2. Control de seguridad estricto contra doble ejecucción en paralelo
     if (procesando || pagado) return;
     setProcesando(true);
 
-    // 3. Validar selección obligatoria de asiento si es Buseta
     if (idVehiculo === 2 && !asientoSeleccionado) {
       toast.error("Por favor, selecciona tu asiento en el mapa de la buseta.");
       setProcesando(false);
       return;
     }
 
-    // 4. Validar datos de la tarjeta bancaria con Zod
     const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
     if (!parsed.success) { 
       toast.error(parsed.error.errors[0].message); 
@@ -100,7 +94,7 @@ const Pago = () => {
     }
 
     try {
-      // 5. Consultar los asientos disponibles reales justo en el momento del envío
+      // 1. Validamos si aún quedan asientos disponibles antes de proceder
       const { data: viajeActual, error: errorFetch } = await supabase
         .from("tbl_viaje" as any)
         .select("asientos_disponibles")
@@ -112,16 +106,9 @@ const Pago = () => {
         throw new Error("¡Lo sentimos! Este viaje ya no cuenta con cupos disponibles.");
       }
 
-      // 6. Restar exactamente UN (1) cupo en la base de datos
-      const nuevoCupo = viajeActual.asientos_disponibles - 1;
-      const { error: errorUpdate } = await supabase
-        .from("tbl_viaje" as any)
-        .update({ asientos_disponibles: nuevoCupo } as any)
-        .eq("id", viajeId);
-
-      if (errorUpdate) throw new Error("Error al actualizar la disponibilidad de cupos.");
-
-      // 7. Registrar el tiquete oficial en la base de datos
+      // 2. SE ELIMINÓ EL '.update()' MANUAL DEL FRONTEND.
+      // Ahora delegamos la responsabilidad al trigger_descontar_asientos de Supabase.
+      // Insertamos el registro en tbl_tiquete con asientos_comprados = 1.
       const { error: errorTiquete } = await supabase
         .from("tbl_tiquete" as any)
         .insert({
@@ -131,22 +118,15 @@ const Pago = () => {
           num_asiento: idVehiculo === 2 ? asientoSeleccionado : null
         } as any);
 
-      // Si por alguna razón la inserción del tiquete falla, revertimos el cupo restado
-      if (errorTiquete) {
-        await supabase
-          .from("tbl_viaje" as any)
-          .update({ asientos_disponibles: viajeActual.asientos_disponibles } as any)
-          .eq("id", viajeId);
-        throw new Error("Error al guardar el tiquete oficial en el sistema.");
-      }
+      if (errorTiquete) throw new Error("Error al guardar el tiquete oficial en el sistema.");
 
-      // 8. Éxito total en la transacción
+      // 3. Éxito total en la transacción
       setPagado(true);
       toast.success("¡Pago aprobado y tiquete reservado con éxito!");
     } catch (err: any) {
       console.error("Error en el proceso de pago:", err);
       toast.error(err?.message || "Ocurrió un problema inesperado en la transacción.");
-      setProcesando(false); // Solo se libera el estado si la transacción realmente falló
+      setProcesando(false);
     }
   };
 
@@ -192,7 +172,6 @@ const Pago = () => {
         ) : (
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 mt-8">
             <div className="space-y-6">
-              {/* Croquis interactivo (solo visible para Busetas) */}
               {idVehiculo === 2 && (
                 <div className="p-6 rounded-2xl bg-card border shadow-sm">
                   <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><Bus className="text-primary" /> Croquis Real de la Buseta</h3>
@@ -206,28 +185,24 @@ const Pago = () => {
                       <div className="w-56 border-2 border-slate-300 rounded-3xl bg-white p-4 shadow-inner">
                         <div className="w-full text-center text-[9px] font-bold text-slate-400 tracking-widest mb-4">FRENTE</div>
                         
-                        {/* FILA 1 */}
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-rose-200 bg-rose-50 text-rose-500 text-[9px] h-11 w-11 font-bold cursor-not-allowed">Cond.</div>
                           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-amber-200 bg-amber-50 text-amber-500 text-[8px] h-11 w-11 text-center font-bold cursor-not-allowed leading-none">No Disp</div>
                           {renderAsientoBoton(1)}
                         </div>
 
-                        {/* FILA 2 */}
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           {renderAsientoBoton(2)}
                           {renderAsientoBoton(3)}
                           <div></div>
                         </div>
 
-                        {/* FILA 3 */}
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           {renderAsientoBoton(4)}
                           {renderAsientoBoton(5)}
                           <div></div>
                         </div>
 
-                        {/* FILA 4 */}
                         <div className="grid grid-cols-3 gap-2">
                           {renderAsientoBoton(6)}
                           {renderAsientoBoton(7)}
