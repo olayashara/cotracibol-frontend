@@ -131,7 +131,7 @@ const Viajes = () => {
     consultarViajesDisponibles();
   }, [fechaStr, tipo, origen, destino]);
 
-  // --- 3. REDIRECCIÓN DIRECTA A LA PASARELA DE PAGO ---
+  // --- 3. REDIRECCIÓN DIRECTA A LA PASARELA DE PAGO (CORREGIDA) ---
   const handleComprarReal = async (viajeId: number, asientosDisponibles: number) => {
     if (!user) { 
       nav("/auth");
@@ -144,16 +144,16 @@ const Viajes = () => {
     }
 
     setComprandoId(viajeId);
-    
     const viajeSeleccionado = viajesFiltrados.find(v => v.id === viajeId);
 
     toast.success("Redirigiendo a la pasarela de pago...");
     
-    // Redirección inmediata pasando los datos al estado del Router
+    // Redirección segura enviando idVehiculo para pintar el mapa interactivo
     nav("/pago", { 
       state: { 
         viajeId: viajeId, 
-        precio: viajeSeleccionado?.precio || 35000 
+        precio: viajeSeleccionado?.precio || 35000,
+        idVehiculo: viajeSeleccionado?.id_vehiculo || (tipo === "buseta" ? 1 : 2)
       } 
     });
     
