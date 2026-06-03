@@ -46,28 +46,19 @@ const Viajes = () => {
   
   const [viajesFiltrados, setViajesFiltrados] = useState<ViajeBD[]>([]);
   const [loading, setLoading] = useState(false);
-  const [comprandoId, setComprandoId] = useState<number | null>(null);
 
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
   const capacidadMax = tipo === "buseta" ? 8 : 4; 
 
-  // --- 1. GUARDÍAN DE SEGURIDAD ---
   useEffect(() => {
     const verificarYCrearPerfil = async () => {
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
-        
         if (currentUser && currentUser.email) {
           const queryBase = supabase.from("tbl_persona" as any) as any;
-          
-          const { data: perfiles } = await queryBase
-            .select("num_documento")
-            .eq("email", currentUser.email);
-
-          const perfilUsuario = perfiles && perfiles.length > 0 ? perfiles[0] : null;
+          const { data: perfiles } = await queryBase.select("num_documento").eq("email", currentUser.email);
 
           if (!perfiles || perfiles.length === 0) {
-            console.log("El usuario no existe en tbl_persona. Creándolo por email...");
             await queryBase.insert({
               nombre: currentUser.user_metadata?.full_name || currentUser.user_metadata?.given_name || "Usuario",
               apellidos: currentUser.user_metadata?.family_name || "",
@@ -78,9 +69,7 @@ const Viajes = () => {
             nav("/completar-perfil");
             return;
           }
-
-          if (!perfilUsuario || !perfilUsuario.num_documento) {
-            console.log("Perfil incompleto detectado. Redirigiendo a /completar-perfil");
+          if (!perfiles[0]?.num_documento) {
             nav("/completar-perfil");
           }
         }
@@ -88,24 +77,17 @@ const Viajes = () => {
         console.error("Error en el guardián de seguridad:", error);
       }
     };
-
     verificarYCrearPerfil();
   }, [nav]);
 
-  // --- 2. EFECTO PARA CARGAR LOS VIAJES REALES DESDE SUPABASE ---
   useEffect(() => {
     const consultarViajesDisponibles = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("tbl_viaje" as any)
-          .select("*")
-          .eq("id_estado", 1);
-
+        const { data, error } = await supabase.from("tbl_viaje" as any).select("*").eq("id_estado", 1);
         if (error) throw error;
 
         const listaViajes: ViajeBD[] = (data as any) || [];
-
         const filtrados = listaViajes.filter((v) => {
           const fechaLocalViaje = new Date(v.hora_salida);
           const anio = fechaLocalViaje.getFullYear();
@@ -121,43 +103,22 @@ const Viajes = () => {
         setViajesFiltrados(filtrados);
       } catch (error: any) {
         console.error("Error cargando viajes:", error);
-        toast.error("No se pudieron cargar los viajes en tiempo real.");
-        setViajesFiltrados([]);
+        toast.error("No se pudieron cargar los viajes.");
       } finally {
         setLoading(false);
       }
     };
-
     consultarViajesDisponibles();
   }, [fechaStr, tipo, origen, destino]);
 
-  // --- 3. REDIRECCIÓN DIRECTA A LA PASARELA DE PAGO (CORREGIDA) ---
-  const handleComprarReal = async (viajeId: number, asientosDisponibles: number) => {
-    if (!user) { 
-      nav("/auth");
-      return; 
-    }
-
+  const handleIrAlPago = (viajeId: number, asientosDisponibles: number, precio: number) => {
+    if (!user) { nav("/auth"); return; }
     if (asientosDisponibles <= 0) {
-      toast.error("Este viaje se encuentra completamente lleno.");
+      toast.error("Este viaje se encuentra lleno.");
       return;
     }
-
-    setComprandoId(viajeId);
-    const viajeSeleccionado = viajesFiltrados.find(v => v.id === viajeId);
-
-    toast.success("Redirigiendo a la pasarela de pago...");
-    
-    // Redirección segura enviando idVehiculo para pintar el mapa interactivo
-    nav("/pago", { 
-      state: { 
-        viajeId: viajeId, 
-        precio: viajeSeleccionado?.precio || 35000,
-        idVehiculo: viajeSeleccionado?.id_vehiculo || (tipo === "buseta" ? 1 : 2)
-      } 
-    });
-    
-    setComprandoId(null);
+    // Redirige directamente transfiriendo los datos del viaje
+    nav("/pago", { state: { viajeId, precio, idVehiculo: tipo === "buseta" ? 1 : 2 } });
   };
 
   return (
@@ -166,7 +127,7 @@ const Viajes = () => {
       <main className="flex-1 container py-12">
         <header className="mb-8">
           <h1 className="text-4xl md:text-5xl font-extrabold">Viajes disponibles</h1>
-          <p className="text-muted-foreground mt-2">Selecciona origen, destino, fecha, tipo de vehículo y la hora de salida.</p>
+          <p className="text-muted-foreground mt-2">Selecciona los parámetros de tu viaje.</p>
         </header>
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-8">
@@ -177,48 +138,38 @@ const Viajes = () => {
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Origen</label>
                   <Select value={origen} onValueChange={(v) => setOrigen(v as Ciudad)}>
-                    <SelectTrigger className="w-full [&>span]:flex-1 [&>span]:text-left">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <SelectTrigger className="w-full">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
                         <SelectValue placeholder="Selecciona origen" />
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      {CIUDADES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
+                      {CIUDADES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Destino</label>
-                  <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    <MapPin className="mr-2 h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left">{destino}</span>
+                  <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                    <MapPin className="mr-2 h-4 w-4" />
+                    <span>{destino}</span>
                   </div>
                 </div>
               </div>
             </div>
-            
+
             <div className="p-5 rounded-2xl bg-card border border-border shadow-soft">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fecha</p>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full justify-start text-left font-medium")}>
+                  <Button variant="outline" className="w-full justify-start text-left font-medium">
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {format(date, "EEEE, d 'de' MMMM", { locale: es })}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 bg-popover" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(d) => d && setDate(d)}
-                    disabled={(d) => d < new Date(new Date().setHours(0,0,0,0))}
-                    initialFocus
-                    locale={es}
-                    className={cn("p-3 pointer-events-auto")}
-                  />
+                  <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} disabled={(d) => d < new Date(new Date().setHours(0,0,0,0))} locale={es} />
                 </PopoverContent>
               </Popover>
             </div>
@@ -230,12 +181,8 @@ const Viajes = () => {
                   <TabsTrigger value="buseta">Buseta</TabsTrigger>
                   <TabsTrigger value="taxi">Taxi</TabsTrigger>
                 </TabsList>
-                <TabsContent value="buseta" className="mt-3 text-sm text-muted-foreground">
-                  Capacidad: 8 cupos · Tarifas según trayecto oficial de la cooperativa.
-                </TabsContent>
-                <TabsContent value="taxi" className="mt-3 text-sm text-muted-foreground">
-                  Capacidad: 4 cupos · Servicio rápido puerta a puerta.
-                </TabsContent>
+                <TabsContent value="buseta" className="mt-3 text-sm text-muted-foreground">Capacidad: 8 cupos.</TabsContent>
+                <TabsContent value="taxi" className="mt-3 text-sm text-muted-foreground">Capacidad: 4 cupos.</TabsContent>
               </Tabs>
             </div>
           </aside>
@@ -247,38 +194,27 @@ const Viajes = () => {
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {viajesFiltrados.length === 0 ? (
                   <p className="text-muted-foreground col-span-full text-center py-10 bg-slate-50 border border-dashed rounded-2xl">
-                    No se encontraron viajes programados en Supabase para los filtros seleccionados hoy.
+                    No se encontraron viajes programados para hoy.
                   </p>
                 ) : (
                   viajesFiltrados.map((viaje) => {
                     const lleno = viaje.asientos_disponibles <= 0;
                     const horaFormateada = viaje.hora_salida.split("T")[1]?.slice(0, 5) || "00:00";
-
                     return (
-                      <article key={viaje.id}
-                        className={cn(
-                          "p-5 rounded-2xl border bg-gradient-card transition-smooth",
-                          lleno ? "opacity-50" : "hover:shadow-elegant hover:-translate-y-0.5"
-                        )}>
+                      <article key={viaje.id} className={cn("p-5 rounded-2xl border bg-gradient-card transition-all", lleno && "opacity-50" )}>
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="text-xs uppercase tracking-wider text-muted-foreground">Salida</p>
                             <p className="text-3xl font-extrabold mt-1">{formatHora(horaFormateada)}</p>
                           </div>
-                          <div className={cn("text-xs font-bold px-2.5 py-1 rounded-full",
-                            lleno ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground")}>
+                          <div className={cn("text-xs font-bold px-2.5 py-1 rounded-full", lleno ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground")}>
                             {lleno ? "Lleno" : `${viaje.asientos_disponibles}/${capacidadMax} cupos`}
                           </div>
                         </div>
                         <div className="mt-4 flex items-center justify-between">
                           <p className="text-lg font-bold text-primary">{formatPrecio(viaje.precio)}</p>
-                          <Button
-                            size="sm"
-                            disabled={lleno || comprandoId === viaje.id}
-                            onClick={() => handleComprarReal(viaje.id, viaje.asientos_disponibles)}
-                            className="bg-primary hover:bg-primary/90"
-                          >
-                            {comprandoId === viaje.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Comprar"}
+                          <Button size="sm" disabled={lleno} onClick={() => handleIrAlPago(viaje.id, viaje.asientos_disponibles, viaje.precio)} className="bg-primary hover:bg-primary/90">
+                            Comprar
                           </Button>
                         </div>
                       </article>
