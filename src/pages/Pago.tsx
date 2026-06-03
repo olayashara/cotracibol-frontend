@@ -28,7 +28,7 @@ const Pago = () => {
   const viajeId = location.state?.viajeId || null;
   const precioFinal = location.state?.precio || 35000;
   
-  // 🔄 CORRECCIÓN: Ahora idVehiculo === 2 significa Buseta, idVehiculo === 1 significa Taxi
+  // ID 1 = Taxi, ID 2 = Buseta según la estructura real de tu Base de Datos
   const idVehiculo = location.state?.idVehiculo || 2; 
 
   const [card, setCard] = useState({ nombre: "", numero: "", expiracion: "", cvv: "" });
@@ -41,9 +41,8 @@ const Pago = () => {
 
   const fechaLegible = useMemo(() => format(new Date(), "EEEE, d 'de' MMMM", { locale: es }), []);
 
-  // 🛰️ Consultar asientos ocupados en tiempo real
+  // Consultar asientos ocupados en tiempo real si el vehículo es una Buseta (ID: 2)
   useEffect(() => {
-    // 🔄 Solo cargamos asientos si es Buseta (idVehiculo === 2)
     if (!viajeId || idVehiculo !== 2) return;
 
     const cargarAsientosReservados = async () => {
@@ -72,55 +71,82 @@ const Pago = () => {
   if (!user) return <Navigate to="/auth" replace />;
 
   const handlePagar = async (e: React.FormEvent) => {
+    // 1. Evitar comportamiento por defecto del navegador inmediatamente
     e.preventDefault();
+    
+    // 2. Control de seguridad estricto contra doble ejecucción en paralelo
     if (procesando || pagado) return;
+    setProcesando(true);
 
-    // 🔄 Exigir asiento si es Buseta (idVehiculo === 2)
+    // 3. Validar selección obligatoria de asiento si es Buseta
     if (idVehiculo === 2 && !asientoSeleccionado) {
       toast.error("Por favor, selecciona tu asiento en el mapa de la buseta.");
+      setProcesando(false);
       return;
     }
 
+    // 4. Validar datos de la tarjeta bancaria con Zod
     const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
-    if (!parsed.success) { toast.error(parsed.error.errors[0].message); return; }
-    if (!viajeId) { toast.error("Referencia de viaje inválida."); return; }
+    if (!parsed.success) { 
+      toast.error(parsed.error.errors[0].message); 
+      setProcesando(false);
+      return; 
+    }
+    
+    if (!viajeId) { 
+      toast.error("Referencia de viaje inválida."); 
+      setProcesando(false);
+      return; 
+    }
 
-    setProcesando(true);
     try {
+      // 5. Consultar los asientos disponibles reales justo en el momento del envío
       const { data: viajeActual, error: errorFetch } = await supabase
-        .from("tbl_viaje" as any).select("asientos_disponibles").eq("id", viajeId).single() as any;
+        .from("tbl_viaje" as any)
+        .select("asientos_disponibles")
+        .eq("id", viajeId)
+        .single() as any;
 
-      if (errorFetch || !viajeActual) throw new Error("No se pudo verificar disponibilidad.");
-      if (viajeActual.asientos_disponibles <= 0) throw new Error("¡El viaje ya no cuenta con cupos!");
+      if (errorFetch || !viajeActual) throw new Error("No se pudo verificar la disponibilidad del viaje.");
+      if (viajeActual.asientos_disponibles <= 0) {
+        throw new Error("¡Lo sentimos! Este viaje ya no cuenta con cupos disponibles.");
+      }
 
+      // 6. Restar exactamente UN (1) cupo en la base de datos
+      const nuevoCupo = viajeActual.asientos_disponibles - 1;
       const { error: errorUpdate } = await supabase
         .from("tbl_viaje" as any)
-        .update({ asientos_disponibles: viajeActual.asientos_disponibles - 1 } as any)
+        .update({ asientos_disponibles: nuevoCupo } as any)
         .eq("id", viajeId);
 
-      if (errorUpdate) throw new Error("Error actualizando cupos.");
+      if (errorUpdate) throw new Error("Error al actualizar la disponibilidad de cupos.");
 
+      // 7. Registrar el tiquete oficial en la base de datos
       const { error: errorTiquete } = await supabase
         .from("tbl_tiquete" as any)
         .insert({
           id_viaje: viajeId,
           email_pasajero: user.email,
           asientos_comprados: 1,
-          // 🔄 Guardamos asiento si es buseta
           num_asiento: idVehiculo === 2 ? asientoSeleccionado : null
         } as any);
 
+      // Si por alguna razón la inserción del tiquete falla, revertimos el cupo restado
       if (errorTiquete) {
-        await supabase.from("tbl_viaje" as any).update({ asientos_disponibles: viajeActual.asientos_disponibles } as any).eq("id", viajeId);
-        throw new Error("Error guardando el tiquete oficial.");
+        await supabase
+          .from("tbl_viaje" as any)
+          .update({ asientos_disponibles: viajeActual.asientos_disponibles } as any)
+          .eq("id", viajeId);
+        throw new Error("Error al guardar el tiquete oficial en el sistema.");
       }
 
+      // 8. Éxito total en la transacción
       setPagado(true);
-      toast.success("¡Pago aprobado!");
+      toast.success("¡Pago aprobado y tiquete reservado con éxito!");
     } catch (err: any) {
-      toast.error(err?.message || "Ocurrió un problema en la transacción.");
-    } finally {
-      setProcesando(false);
+      console.error("Error en el proceso de pago:", err);
+      toast.error(err?.message || "Ocurrió un problema inesperado en la transacción.");
+      setProcesando(false); // Solo se libera el estado si la transacción realmente falló
     }
   };
 
@@ -166,50 +192,56 @@ const Pago = () => {
         ) : (
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 mt-8">
             <div className="space-y-6">
-              {/* 🔄 El croquis se renderiza si es Buseta (idVehiculo === 2) */}
+              {/* Croquis interactivo (solo visible para Busetas) */}
               {idVehiculo === 2 && (
                 <div className="p-6 rounded-2xl bg-card border shadow-sm">
                   <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><Bus className="text-primary" /> Croquis Real de la Buseta</h3>
                   
-                  <div className="flex flex-col md:flex-row items-center justify-center gap-8 bg-slate-50 p-6 rounded-xl border border-dashed">
-                    <div className="w-56 border-2 border-slate-300 rounded-3xl bg-white p-4 shadow-inner">
-                      <div className="w-full text-center text-[9px] font-bold text-slate-400 tracking-widest mb-4">FRENTE</div>
-                      
-                      {/* FILA 1 */}
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-rose-200 bg-rose-50 text-rose-500 text-[9px] h-11 w-11 font-bold cursor-not-allowed">Cond.</div>
-                        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-amber-200 bg-amber-50 text-amber-500 text-[8px] h-11 w-11 text-center font-bold cursor-not-allowed leading-none">No Disp</div>
-                        {renderAsientoBoton(1)}
+                  {cargandoAsientos ? (
+                    <div className="flex items-center justify-center py-8 gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="animate-spin h-4 w-4 text-primary" /> Actualizando estado de los asientos...
+                    </div>
+                  ) : (
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-8 bg-slate-50 p-6 rounded-xl border border-dashed">
+                      <div className="w-56 border-2 border-slate-300 rounded-3xl bg-white p-4 shadow-inner">
+                        <div className="w-full text-center text-[9px] font-bold text-slate-400 tracking-widest mb-4">FRENTE</div>
+                        
+                        {/* FILA 1 */}
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-rose-200 bg-rose-50 text-rose-500 text-[9px] h-11 w-11 font-bold cursor-not-allowed">Cond.</div>
+                          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-amber-200 bg-amber-50 text-amber-500 text-[8px] h-11 w-11 text-center font-bold cursor-not-allowed leading-none">No Disp</div>
+                          {renderAsientoBoton(1)}
+                        </div>
+
+                        {/* FILA 2 */}
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          {renderAsientoBoton(2)}
+                          {renderAsientoBoton(3)}
+                          <div></div>
+                        </div>
+
+                        {/* FILA 3 */}
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          {renderAsientoBoton(4)}
+                          {renderAsientoBoton(5)}
+                          <div></div>
+                        </div>
+
+                        {/* FILA 4 */}
+                        <div className="grid grid-cols-3 gap-2">
+                          {renderAsientoBoton(6)}
+                          {renderAsientoBoton(7)}
+                          {renderAsientoBoton(8)}
+                        </div>
                       </div>
 
-                      {/* FILA 2 */}
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        {renderAsientoBoton(2)}
-                        {renderAsientoBoton(3)}
-                        <div></div>
-                      </div>
-
-                      {/* FILA 3 */}
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        {renderAsientoBoton(4)}
-                        {renderAsientoBoton(5)}
-                        <div></div>
-                      </div>
-
-                      {/* FILA 4 */}
-                      <div className="grid grid-cols-3 gap-2">
-                        {renderAsientoBoton(6)}
-                        {renderAsientoBoton(7)}
-                        {renderAsientoBoton(8)}
+                      <div className="space-y-2 text-xs">
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-slate-100 border rounded"></div><span>Disponible</span></div>
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-emerald-500 rounded"></div><span>Tu selección</span></div>
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-amber-400 rounded"></div><span>Ocupado</span></div>
                       </div>
                     </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center gap-2"><div className="w-4 h-4 bg-slate-100 border rounded"></div><span>Disponible</span></div>
-                      <div className="flex items-center gap-2"><div className="w-4 h-4 bg-emerald-500 rounded"></div><span>Tu selección</span></div>
-                      <div className="flex items-center gap-2"><div className="w-4 h-4 bg-amber-400 rounded"></div><span>Ocupado</span></div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -217,11 +249,11 @@ const Pago = () => {
                 <div className="flex items-center gap-2 text-lg font-bold"><CreditCard className="text-primary" /> Pasarela Bancaria</div>
                 <div>
                   <label className="text-sm font-medium block mb-1">Nombre del titular</label>
-                  <Input value={card.nombre} onChange={(e) => setCard({ ...card, nombre: e.target.value })} placeholder="Como aparece en la tarjeta" />
+                  <Input value={card.nombre} onChange={(e) => setCard({ ...card, nombre: e.target.value })} placeholder="Como aparece en la tarjeta" disabled={procesando} />
                 </div>
                 <div>
                   <label className="text-sm font-medium block mb-1">Número de tarjeta</label>
-                  <Input value={card.numero} onChange={(e) => setCard({ ...card, numero: e.target.value.replace(/\D/g, "").slice(0, 19).replace(/(.{4})/g, "$1 ").trim() })} placeholder="1234 5678 9012 3456" />
+                  <Input value={card.numero} onChange={(e) => setCard({ ...card, numero: e.target.value.replace(/\D/g, "").slice(0, 19).replace(/(.{4})/g, "$1 ").trim() })} placeholder="1234 5678 9012 3456" disabled={procesando} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -230,15 +262,19 @@ const Pago = () => {
                       let v = e.target.value.replace(/\D/g, "").slice(0, 4);
                       if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
                       setCard({ ...card, expiracion: v });
-                    }} placeholder="MM/AA" maxLength={5} />
+                    }} placeholder="MM/AA" maxLength={5} disabled={procesando} />
                   </div>
                   <div>
                     <label className="text-sm font-medium block mb-1">CVV</label>
-                    <Input type="password" value={card.cvv} onChange={(e) => setCard({ ...card, cvv: e.target.value.replace(/\D/g, "").slice(0, 3) })} placeholder="123" maxLength={3} />
+                    <Input type="password" value={card.cvv} onChange={(e) => setCard({ ...card, cvv: e.target.value.replace(/\D/g, "").slice(0, 3) })} placeholder="123" maxLength={3} disabled={procesando} />
                   </div>
                 </div>
                 <Button type="submit" disabled={procesando} className="w-full h-11 font-bold">
-                  {procesando ? "Procesando Transacción..." : `Pagar ${formatPrecio(precioFinal)}`}
+                  {procesando ? (
+                    <span className="flex items-center gap-2 justify-center"><Loader2 className="animate-spin h-4 w-4" /> Procesando Transacción...</span>
+                  ) : (
+                    `Pagar ${formatPrecio(precioFinal)}`
+                  )}
                 </Button>
               </form>
             </div>
