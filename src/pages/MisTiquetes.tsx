@@ -2,139 +2,184 @@ import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { formatPrecio, formatHora } from "@/lib/horarios";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Bus, Car, Ticket, Loader2 } from "lucide-react";
-import { formatHora, formatPrecio } from "@/lib/horarios";
-import { supabase } from "@/integrations/supabase/client";
+import { Loader2, Ticket, MapPin, Calendar, Clock, Armchair, Bus, Car } from "lucide-react";
 
-interface TiqueteCruzado {
+interface TiqueteMapeado {
   id: number;
-  numero_asiento: number;
+  id_viaje: number;
+  fecha_compra: string;
+  num_asiento: number | null;
+  asientos_comprados: number;
+  hora_salida: string;
   precio: number;
-  viaje?: {
-    origen: string;
-    destino: string;
-    fecha: string;
-    hora: string;
-    tipo: "buseta" | "taxi";
-  };
+  id_vehiculo: number;
+  id_ruta: number;
 }
 
 const MisTiquetes = () => {
-  const { user } = useAuth();
-  const [items, setItems] = useState<TiqueteCruzado[]>([]);
-  const [cargando, setCargando] = useState<boolean>(true);
+  const { user, loading: authLoading } = useAuth();
+  const [tiquetes, setTiquetes] = useState<TiqueteMapeado[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const consultarTiquetesReal = async () => {
-      if (!user?.email) return;
-      setCargando(true);
+    if (!user) return;
 
+    const cargarTiquetes = async () => {
       try {
-        // 1. Consultar tiquetes asignados al correo del pasajero
-        const { data: tiquetesData, error: tiquetesError } = await supabase
+        setLoading(true);
+        
+        // Consultamos tbl_tiquete trayendo los datos anidados de tbl_viaje
+        const { data: tiquetesData, error: errorTiquetes } = await supabase
           .from("tbl_tiquete" as any)
-          .select("*")
-          .eq("email_pasajero", user.email);
+          .select(`
+            id,
+            id_viaje,
+            fecha_compra,
+            num_asiento,
+            asientos_comprados,
+            tbl_viaje (
+              hora_salida,
+              precio,
+              id_vehiculo,
+              id_ruta
+            )
+          `)
+          .eq("email_pasajero", user.email)
+          .order("fecha_compra", { ascending: false });
 
-        if (tiquetesError) throw tiquetesError;
+        if (errorTiquetes) throw errorTiquetes;
 
-        if (!tiquetesData || tiquetesData.length === 0) {
-          setItems([]);
-          return;
-        }
-
-        // 2. Traer los viajes disponibles de la base de datos
-        const { data: viajesData, error: viajesError } = await supabase
-          .from("tbl_viaje" as any)
-          .select("*");
-
-        if (viajesError) throw viajesError;
-
-        // Forzamos el tipado de las listas como any[] para neutralizar los errores de TypeScript en el mapeo
-        const listaTiquetes = tiquetesData as any[];
-        const listaViajes = viajesData as any[];
-
-        // 3. Cruzar la información simulando el modelo de datos anterior
-        const formateados: TiqueteCruzado[] = listaTiquetes.map((t) => {
-          const v = listaViajes.find((viaje) => viaje.id === t.id_viaje);
-          
-          // Dividimos la cadena del timestamp de forma segura (ej: '2026-06-02T10:00:00')
-          const fechaSalida = v?.hora_salida ? v.hora_salida.split("T")[0] : "2026-06-02";
-          const horaSalida = v?.hora_salida ? v.hora_salida.split("T")[1]?.slice(0, 5) : "00:00";
-
-          return {
+        if (tiquetesData) {
+          const mapeados: TiqueteMapeado[] = tiquetesData.map((t: any) => ({
             id: t.id,
-            numero_asiento: t.asientos_comprados || 1,
-            precio: v?.precio || 40000,
-            viaje: {
-              origen: v?.id_ruta === 2 ? "Ciudad Bolívar" : "Medellín",
-              destino: v?.id_ruta === 2 ? "Medellín" : "Ciudad Bolívar",
-              fecha: fechaSalida,
-              hora: horaSalida,
-              tipo: v?.id_vehiculo === 2 ? "taxi" : "buseta",
-            }
-          };
-        });
-
-        setItems(formateados);
+            id_viaje: t.id_viaje,
+            fecha_compra: t.fecha_compra,
+            num_asiento: t.num_asiento,
+            asientos_comprados: t.asientos_comprados,
+            hora_salida: t.tbl_viaje?.hora_salida,
+            precio: t.tbl_viaje?.precio,
+            id_vehiculo: t.tbl_viaje?.id_vehiculo,
+            id_ruta: t.tbl_viaje?.id_ruta,
+          }));
+          setTiquetes(mapeados);
+        }
       } catch (error) {
-        console.error("Error al obtener tiquetes de Supabase:", error);
+        console.error("Error al cargar los tiquetes:", error);
       } finally {
-        setCargando(false);
+        setLoading(false);
       }
     };
 
-    consultarTiquetesReal();
+    cargarTiquetes();
   }, [user]);
 
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="animate-spin h-8 w-8 text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-slate-50/50">
       <Navbar />
       <main className="flex-1 container py-12">
-        <h1 className="text-4xl font-extrabold">Mis tiquetes</h1>
-        <p className="text-muted-foreground mt-2">Historial de viajes comprados.</p>
+        <h1 className="text-4xl font-extrabold tracking-tight mb-8">Mis Tiquetes</h1>
 
-        {cargando ? (
-          <div className="grid place-items-center py-20">
-            <Loader2 className="animate-spin text-primary h-8 w-8" />
+        {tiquetes.length === 0 ? (
+          <div className="text-center py-16 border border-dashed rounded-2xl bg-white max-w-xl mx-auto">
+            <Ticket className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+            <h3 className="text-lg font-bold">No tienes tiquetes activos</h3>
           </div>
         ) : (
-          <div className="mt-8 grid md:grid-cols-2 gap-4">
-            {items.length === 0 && (
-              <div className="md:col-span-2 p-12 text-center rounded-2xl border border-dashed">
-                <Ticket className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-3 text-muted-foreground">Aún no has comprado tiquetes.</p>
-              </div>
-            )}
-            
-            {items.map((t) => (
-              <article key={t.id} className="p-5 rounded-2xl bg-gradient-card border shadow-soft">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {t.viaje?.origen} → {t.viaje?.destino}
-                    </p>
-                    <p className="text-2xl font-extrabold mt-1">
-                      {t.viaje?.fecha && format(new Date(t.viaje.fecha + "T00:00:00"), "d MMM yyyy", { locale: es })}
-                    </p>
-                    <p className="text-lg font-semibold text-primary">
-                      {formatHora((t.viaje?.hora ?? "00:00").slice(0, 5))}
-                    </p>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {tiquetes.map((tiquete) => {
+              const fechaViaje = tiquete.hora_salida ? new Date(tiquete.hora_salida) : new Date();
+              const horaFormateada = tiquete.hora_salida?.split("T")[1]?.slice(0, 5) || "00:00";
+
+              return (
+                <article key={tiquete.id} className="bg-white border rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
+                  {/* Encabezado */}
+                  <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                    <span className="text-xs font-mono font-bold text-slate-500">RESERVA: #CO-{tiquete.id}</span>
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">Confirmado</span>
                   </div>
-                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                    {t.viaje?.tipo === "taxi" ? <Car className="h-5 w-5" /> : <Bus className="h-5 w-5" />}
+
+                  {/* Detalles operativos */}
+                  <div className="p-5 space-y-4 flex-1">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold block">Fecha</span>
+                          <span className="font-bold text-slate-700 text-xs capitalize">{format(fechaViaje, "eee, d 'de' MMM", { locale: es })}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-slate-400" />
+                        <div>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold block">Hora Salida</span>
+                          <span className="font-bold text-slate-700 text-xs">{formatHora(horaFormateada)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-xl border">
+                      <div className="flex items-center gap-2 font-bold text-slate-700">
+                        {tiquete.id_vehiculo === 2 ? (
+                          <>
+                            <Bus className="h-4 w-4 text-amber-500" />
+                            <span>Servicio Buseta</span>
+                          </>
+                        ) : (
+                          <>
+                            <Car className="h-4 w-4 text-blue-500" />
+                            <span>Servicio Taxi Colectivo</span>
+                          </>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground font-bold">{tiquete.asientos_comprados} Pasajero</span>
+                    </div>
+
+                    {/* 📌 SECCIÓN SOLICITADA: MOSTRAR EL NÚMERO DE ASIENTO COMPRADO */}
+                    <div className="mt-2">
+                      {tiquete.id_vehiculo === 2 ? (
+                        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-900">
+                          <Armchair className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                          <div>
+                            <span className="text-[10px] text-emerald-700 uppercase font-extrabold tracking-wider block">Puesto Reservado</span>
+                            <span className="text-sm font-black">Asiento Número #{tiquete.num_asiento}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-3 text-blue-900">
+                          <Armchair className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                          <div>
+                            <span className="text-[10px] text-blue-700 uppercase font-extrabold tracking-wider block">Asignación de Puesto</span>
+                            <span className="text-xs font-bold">Por orden de llegada en la terminal</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Cantidad cupos: <b className="text-foreground">{t.numero_asiento}</b>
-                  </span>
-                  <span className="font-bold">{formatPrecio(Number(t.precio))}</span>
-                </div>
-              </article>
-            ))}
+
+                  {/* Pie de tarjeta con precio */}
+                  <div className="p-4 bg-slate-50/50 border-t flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground font-medium">Total Abonado</span>
+                    <span className="text-lg font-black text-slate-900">{formatPrecio(tiquete.precio)}</span>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </main>
