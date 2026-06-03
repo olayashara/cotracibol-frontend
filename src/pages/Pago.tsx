@@ -4,16 +4,15 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { formatPrecio } from "@/lib/horarios";
-import { Bus, Car, CheckCircle2, CreditCard, Loader2, Lock, MapPin } from "lucide-react";
+import { Bus, CheckCircle2, CreditCard, Loader2, Lock, MapPin } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 
-// Validaciones seguras de la pasarela con Zod
 const cardSchema = z.object({
   nombre: z.string().trim().min(2, "Nombre del titular requerido").max(60),
   numero: z.string().trim().regex(/^\d{13,19}$/, "Número de tarjeta inválido"),
@@ -26,7 +25,6 @@ const Pago = () => {
   const nav = useNavigate();
   const location = useLocation();
 
-  // 🛡️ Captura segura del estado del router enviado desde Viajes.tsx
   const viajeId = location.state?.viajeId || null;
   const precioFinal = location.state?.precio || 35000;
 
@@ -34,34 +32,76 @@ const Pago = () => {
   const [procesando, setProcesando] = useState(false);
   const [pagado, setPagado] = useState(false);
 
-  // Formateador inteligente de la fecha de hoy para el resumen
   const fechaLegible = useMemo(() => {
     return format(new Date(), "EEEE, d 'de' MMMM", { locale: es });
   }, []);
 
   if (loading) return null;
-  // Si no hay usuario logueado, lo mandamos a autenticarse
   if (!user) return <Navigate to="/auth" replace />;
 
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validamos la tarjeta con Zod
     const parsed = cardSchema.safeParse({ ...card, numero: card.numero.replace(/\s+/g, "") });
-    if (!parsed.success) { 
-      toast.error(parsed.error.errors[0].message); 
-      return; 
+    if (!parsed.success) {
+      toast.error(parsed.error.errors[0].message);
+      return;
+    }
+
+    if (!viajeId) {
+      toast.error("No se encontró una referencia de viaje válida.");
+      return;
     }
 
     setProcesando(true);
     try {
-      // Pequeña espera de simulación para representar la pasarela bancaria
       await new Promise((r) => setTimeout(r, 1800));
+
+      const { data, error: errorFetch } = await supabase
+        .from("tbl_viaje" as any)
+        .select("asientos_disponibles")
+        .eq("id", viajeId)
+        .single() as any;
+
+      if (errorFetch || !data) {
+        throw new Error("No se pudo verificar la disponibilidad del viaje.");
+      }
+
+      const cuposDisponibles = data.asientos_disponibles;
+
+      if (cuposDisponibles <= 0) {
+        throw new Error("¡Lo sentimos! Este viaje acaba de completarse y no quedan cupos.");
+      }
+
+      const { error: errorUpdate } = await supabase
+        .from("tbl_viaje" as any)
+        .update({ asientos_disponibles: cuposDisponibles - 1 } as any)
+        .eq("id", viajeId);
+
+      if (errorUpdate) throw new Error("Error al actualizar los asientos del vehículo.");
+
+      const { error: errorTiquete } = await supabase
+        .from("tbl_tiquete" as any)
+        .insert({
+          id_viaje: viajeId,
+          email_pasajero: user.email,
+          asientos_comprados: 1
+        } as any);
+
+      if (errorTiquete) {
+        await supabase
+          .from("tbl_viaje" as any)
+          .update({ asientos_disponibles: cuposDisponibles } as any)
+          .eq("id", viajeId);
+          
+        throw new Error("No se pudo registrar tu tiquete oficial.");
+      }
 
       setPagado(true);
       toast.success("Pago aprobado", {
         description: "Tu tiquete fue confirmado. Ya puedes consultarlo en tu historial.",
       });
+
     } catch (err: any) {
       toast.error(err?.message ?? "No se pudo procesar el pago");
     } finally {
@@ -88,6 +128,7 @@ const Pago = () => {
             <p className="text-muted-foreground mt-2">
               Tu tiquete fue confirmado con éxito. Ya se encuentra registrado en tu cuenta de COTRACIBOL.
             </p>
+        
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
               <Button onClick={() => nav("/mis-tiquetes")} className="bg-primary hover:bg-primary/90">
                 Ver mis tiquetes
@@ -100,7 +141,6 @@ const Pago = () => {
         ) : (
           <div className="grid lg:grid-cols-[1fr_360px] gap-8 mt-8">
             
-            {/* Formulario de pago con tarjeta */}
             <form onSubmit={handlePagar} className="p-6 rounded-2xl bg-card border shadow-soft space-y-5">
               <div className="flex items-center gap-2 text-lg font-bold">
                 <CreditCard className="h-5 w-5 text-primary" /> Datos de la tarjeta
@@ -146,14 +186,14 @@ const Pago = () => {
                 </div>
               </div>
               <Button type="submit" disabled={procesando} className="w-full bg-primary hover:bg-primary/90 h-11 text-base font-bold">
-                {procesando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando pago…</> : <>Pagar {formatPrecio(precioFinal)}</>}
+                {procesando ?
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando pago…</> : <>Pagar {formatPrecio(precioFinal)}</>}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
                 Esta es una pasarela simulada para fines demostrativos. No se realiza ningún cobro real a tu cuenta bancaria.
               </p>
             </form>
 
-            {/* Resumen del Viaje Adquirido en Supabase */}
             <aside className="p-6 rounded-2xl bg-gradient-card border shadow-soft h-fit lg:sticky lg:top-24">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resumen del viaje</p>
               <div className="mt-4 flex items-center gap-2 text-sm">

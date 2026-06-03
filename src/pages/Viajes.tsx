@@ -39,7 +39,6 @@ interface ViajeBD {
 const Viajes = () => {
   const { user } = useAuth();
   const nav = useNavigate();
-
   const [origen, setOrigen] = useState<Ciudad>("Medellín");
   const destino = useMemo<Ciudad>(() => (origen === "Medellín" ? "Ciudad Bolívar" : "Medellín"), [origen]);
   const [date, setDate] = useState<Date>(new Date());
@@ -50,8 +49,6 @@ const Viajes = () => {
   const [comprandoId, setComprandoId] = useState<number | null>(null);
 
   const fechaStr = useMemo(() => format(date, "yyyy-MM-dd"), [date]);
-
-  // Capacidad máxima adaptada al modelo real (Buseta: 8, Taxi: 4)
   const capacidadMax = tipo === "buseta" ? 8 : 4; 
 
   // --- 1. GUARDÍAN DE SEGURIDAD ---
@@ -110,19 +107,14 @@ const Viajes = () => {
         const listaViajes: ViajeBD[] = (data as any) || [];
 
         const filtrados = listaViajes.filter((v) => {
-          // Normalización inteligente de fecha extrayendo la zona horaria local de Colombia
           const fechaLocalViaje = new Date(v.hora_salida);
           const anio = fechaLocalViaje.getFullYear();
           const mes = String(fechaLocalViaje.getMonth() + 1).padStart(2, "0");
           const dia = String(fechaLocalViaje.getDate()).padStart(2, "0");
           const fechaViajeFormateada = `${anio}-${mes}-${dia}`;
           
-          // Filtro por tipo de vehículo (id_vehiculo = 1 es Buseta, id_vehiculo = 2 es Taxi)
           const coincideVehiculo = tipo === "buseta" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
-          
-          // Filtro por fecha exacta seleccionada en la web
           const coincideFecha = fechaViajeFormateada === fechaStr;
-
           return coincideFecha && coincideVehiculo;
         });
 
@@ -139,10 +131,10 @@ const Viajes = () => {
     consultarViajesDisponibles();
   }, [fechaStr, tipo, origen, destino]);
 
-  // --- 3. LÓGICA DE COMPRA REAL INTEGRADA CON REDIRECCIÓN A PAGO Y HISTORIAL ---
+  // --- 3. REDIRECCIÓN DIRECTA A LA PASARELA DE PAGO ---
   const handleComprarReal = async (viajeId: number, asientosDisponibles: number) => {
     if (!user) { 
-      nav("/auth"); 
+      nav("/auth");
       return; 
     }
 
@@ -151,44 +143,21 @@ const Viajes = () => {
       return;
     }
 
-    try {
-      setComprandoId(viajeId);
-      const queryTiquete = supabase.from("tbl_tiquete" as any) as any;
+    setComprandoId(viajeId);
+    
+    const viajeSeleccionado = viajesFiltrados.find(v => v.id === viajeId);
 
-      // 1. Insertamos el registro en tbl_tiquete (Habilitando su visualización instantánea en Mis Tiquetes)
-      const { error } = await queryTiquete.insert({
-        id_viaje: viajeId,
-        email_pasajero: user.email,
-        asientos_comprados: 1
-      });
-
-      if (error) throw error;
-
-      toast.success("¡Tiquete reservado con éxito! Redirigiendo a la pasarela de pago...");
-
-      // Actualizamos visualmente el frontend local de inmediato
-      setViajesFiltrados((prev) =>
-        prev.map((v) => (v.id === viajeId ? { ...v, asientos_disponibles: v.asientos_disponibles - 1 } : v))
-      );
-
-      // Buscamos el viaje actual para pasar sus variables de contexto económico
-      const viajeSeleccionado = viajesFiltrados.find(v => v.id === viajeId);
-      
-      // 2. Redirección diferida a la pantalla de Pago enviando los metadatos en el state del Router
-      setTimeout(() => {
-        nav("/pago", { 
-          state: { 
-            viajeId: viajeId, 
-            precio: viajeSeleccionado?.precio || 0 
-          } 
-        });
-      }, 1500);
-
-    } catch (error: any) {
-      toast.error(error.message || "No se pudo procesar la reserva.");
-    } finally {
-      setComprandoId(null);
-    }
+    toast.success("Redirigiendo a la pasarela de pago...");
+    
+    // Redirección inmediata pasando los datos al estado del Router
+    nav("/pago", { 
+      state: { 
+        viajeId: viajeId, 
+        precio: viajeSeleccionado?.precio || 35000 
+      } 
+    });
+    
+    setComprandoId(null);
   };
 
   return (
@@ -201,7 +170,6 @@ const Viajes = () => {
         </header>
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-8">
-          
           <aside className="space-y-6 lg:sticky lg:top-24 self-start">
             <div className="p-5 rounded-2xl bg-card border border-border shadow-soft">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Ruta</p>
