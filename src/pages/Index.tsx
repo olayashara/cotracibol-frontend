@@ -21,7 +21,7 @@ const Index = () => {
               <MapPin className="h-3 w-3" /> Ciudad Bolívar ↔ Medellín
             </span>
             <h1 className="mt-5 text-5xl md:text-7xl font-extrabold leading-[0.95]">
-              Tu camino<br />a casa,<br />
+              Tu camino<br/>a casa,<br />
               <span className="text-secondary">a tiempo.</span>
             </h1>
             <p className="mt-6 text-lg text-primary-foreground/90 max-w-md">
