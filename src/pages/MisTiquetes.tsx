@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPrecio, formatHora } from "@/lib/horarios";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Loader2, Ticket, MapPin, Calendar, Clock, Armchair, Bus, Car } from "lucide-react";
+import { Loader2, Ticket, MapPin, Calendar, Clock, Armchair, Bus, Car, Printer } from "lucide-react";
 
 interface TiqueteMapeado {
   id: number;
@@ -77,6 +78,18 @@ const MisTiquetes = () => {
     cargarTiquetes();
   }, [user]);
 
+  const obtenerRutaTexto = (idRuta: number) => {
+    if (idRuta === 2) {
+      return { origen: "Medellín", destino: "Ciudad Bolívar" };
+    }
+    // Por defecto ID 1 u otros mapea la ruta inversa
+    return { origen: "Ciudad Bolívar", destino: "Medellín" };
+  };
+
+  const handleImprimir = () => {
+    window.print();
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -90,32 +103,52 @@ const MisTiquetes = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/50">
-      <Navbar />
-      <main className="flex-1 container py-12">
-        <h1 className="text-4xl font-extrabold tracking-tight mb-8">Mis Tiquetes</h1>
+    <div className="min-h-screen flex flex-col bg-slate-50/50 print:bg-white">
+      {/* Ocultar elementos de navegación al imprimir */}
+      <div className="print:hidden">
+        <Navbar />
+      </div>
+      
+      <main className="flex-1 container py-12 print:py-4">
+        <h1 className="text-4xl font-extrabold tracking-tight mb-8 print:hidden">Mis Tiquetes</h1>
 
         {tiquetes.length === 0 ? (
-          <div className="text-center py-16 border border-dashed rounded-2xl bg-white max-w-xl mx-auto">
+          <div className="text-center py-16 border border-dashed rounded-2xl bg-white max-w-xl mx-auto print:hidden">
             <Ticket className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
             <h3 className="text-lg font-bold">No tienes tiquetes activos</h3>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 print:grid-cols-1 print:gap-4">
             {tiquetes.map((tiquete) => {
               const fechaViaje = tiquete.hora_salida ? new Date(tiquete.hora_salida) : new Date();
               const horaFormateada = tiquete.hora_salida?.split("T")[1]?.slice(0, 5) || "00:00";
+              
+              // Resolvemos los nombres legibles de las terminales
+              const { origen, destino } = obtenerRutaTexto(tiquete.id_ruta);
 
               return (
-                <article key={tiquete.id} className="bg-white border rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
+                <article key={tiquete.id} className="bg-white border rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between print:shadow-none print:border-2 print:break-inside-avoid">
                   {/* Encabezado */}
-                  <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                  <div className="p-4 border-b bg-slate-50 flex justify-between items-center print:bg-slate-100">
                     <span className="text-xs font-mono font-bold text-slate-500">RESERVA: #CO-{tiquete.id}</span>
-                    <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">Confirmado</span>
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full print:border">Confirmado</span>
                   </div>
 
                   {/* Detalles operativos */}
                   <div className="p-5 space-y-4 flex-1">
+                    <div className="bg-slate-50 border p-3 rounded-xl space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <MapPin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <span className="text-muted-foreground font-medium w-14">Origen:</span>
+                        <span>{origen}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                        <span className="text-muted-foreground font-medium w-14">Destino:</span>
+                        <span>{destino}</span>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-slate-400" />
@@ -150,7 +183,7 @@ const MisTiquetes = () => {
                       <span className="text-muted-foreground font-bold">{tiquete.asientos_comprados} Pasajero</span>
                     </div>
 
-                    {/* 📌 SECCIÓN SOLICITADA: MOSTRAR EL NÚMERO DE ASIENTO COMPRADO */}
+                    {/* Sección de Asiento Comprado */}
                     <div className="mt-2">
                       {tiquete.id_vehiculo === 2 ? (
                         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-emerald-900">
@@ -172,10 +205,21 @@ const MisTiquetes = () => {
                     </div>
                   </div>
 
-                  {/* Pie de tarjeta con precio */}
+                  {/* Pie de tarjeta con precio e impresión */}
                   <div className="p-4 bg-slate-50/50 border-t flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground font-medium">Total Abonado</span>
-                    <span className="text-lg font-black text-slate-900">{formatPrecio(tiquete.precio)}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Abonado</span>
+                      <span className="text-lg font-black text-slate-900">{formatPrecio(tiquete.precio)}</span>
+                    </div>
+                    {/* Botón interactivo de impresión */}
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={handleImprimir}
+                      className="print:hidden h-8 text-xs font-semibold flex items-center gap-1.5"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> Imprimir
+                    </Button>
                   </div>
                 </article>
               );
@@ -183,7 +227,10 @@ const MisTiquetes = () => {
           </div>
         )}
       </main>
-      <Footer />
+
+      <div className="print:hidden">
+        <Footer />
+      </div>
     </div>
   );
 };
