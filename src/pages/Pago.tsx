@@ -172,7 +172,7 @@ const Pago = () => {
               documento: pasajeroActual.documento,
               fecha_nacimiento: pasajeroActual.fechaNacimiento || null,
               is_asiento_extra: pasajeroActual.isAsientoExtra || false,
-              adulto_responsable: pasajeroActual.adultoResponsableIdx || null
+              adulto_responsable_idx: pasajeroActual.adultoResponsableIdx !== "" ? pasajeroActual.adultoResponsableIdx : null
             } as any);
 
           if (errorPasajero) {
