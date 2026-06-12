@@ -94,7 +94,7 @@ const Pago = () => {
     });
   };
 
-  // 🔄 CORRECCIÓN PROFUNDA: Adaptado para registrar múltiples pasajes iterativamente
+  // 🔄 CORRECCIÓN PROFUNDA: Adaptado para registrar múltiples pasajes iterativamente enlazando tbl_pasajero
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -134,20 +134,50 @@ const Pago = () => {
         throw new Error(`¡Lo sentimos! Este viaje solo cuenta con ${viajeActual.asientos_disponibles} cupos disponibles.`);
       }
 
-      // 2. Inserción en bucle para registrar los tiquetes de todo el grupo familiar/pasajeros
+      // 2. Inserción en bucle para registrar los tiquetes y sus respectivos pasajeros en la nueva tabla
       const totalTiquetes = pasajeros.length > 0 ? pasajeros.length : cantidadPasajes;
       
       for (let i = 0; i < totalTiquetes; i++) {
-        const { error: errorTiquete } = await supabase
+        const pasajeroActual = pasajeros[i];
+
+        // A. Insertamos el tiquete y solicitamos el ID de forma segura para TypeScript
+        const respuestaTiquete = await supabase
           .from("tbl_tiquete" as any)
           .insert({
             id_viaje: viajeId,
             email_pasajero: user.email,
             asientos_comprados: 1,
             num_asiento: idVehiculo === 2 ? asientosSeleccionados[i] : null
-          } as any);
+          } as any)
+          .select("id")
+          .single() as any; 
 
-        if (errorTiquete) throw new Error("Error al guardar los tiquetes oficiales en el sistema.");
+        const nuevoTiquete = respuestaTiquete.data;
+        const errorTiquete = respuestaTiquete.error;
+
+        if (errorTiquete || !nuevoTiquete) {
+          throw new Error("Error al guardar los tiquetes oficiales en el sistema.");
+        }
+
+        // B. Si hay datos detallados del formulario, los guardamos en tbl_pasajero enlazados al id_tiquete
+        if (pasajeroActual) {
+          const { error: errorPasajero } = await supabase
+            .from("tbl_pasajero" as any)
+            .insert({
+              id_tiquete: nuevoTiquete.id,
+              nombre: pasajeroActual.nombre,
+              apellido: pasajeroActual.apellido,
+              tipo_documento: pasajeroActual.tipoDocumento,
+              documento: pasajeroActual.documento,
+              fecha_nacimiento: pasajeroActual.fechaNacimiento,
+              is_asiento_extra: pasajeroActual.isAsientoExtra
+            } as any);
+
+          if (errorPasajero) {
+            console.error("Error guardando pasajero:", errorPasajero);
+            throw new Error(`Error al registrar el manifiesto del Pasajero #${i + 1}.`);
+          }
+        }
       }
 
       // 3. Éxito total en la transacción
