@@ -106,12 +106,9 @@ const Viajes = () => {
           const dia = String(fechaLocalViaje.getDate()).padStart(2, "0");
           const fechaViajeFormateada = `${anio}-${mes}-${dia}`;
           
-          // 🔄 NUEVO FILTRO COMPLETO:
-          // 1. Validar Tipo Vehículo (1: Taxi, 2: Buseta)
+          // FILTROS OPERATIVOS:
           const coincideVehiculo = tipo === "taxi" ? v.id_vehiculo === 1 : v.id_vehiculo === 2;
-          // 2. Validar Fecha exacta
           const coincideFecha = fechaViajeFormateada === fechaStr;
-          // 3. Validar Ruta correspondiente (Evita que salgan en la ruta inversa)
           const coincideRuta = v.id_ruta === idRutaSeleccionada;
 
           return coincideFecha && coincideVehiculo && coincideRuta;
@@ -126,15 +123,28 @@ const Viajes = () => {
       }
     };
     consultarViajesDisponibles();
-  }, [fechaStr, tipo, idRutaSeleccionada]); // Agregado idRutaSeleccionada como dependencia estable
+  }, [fechaStr, tipo, idRutaSeleccionada]);
 
-  const handleIrAlPago = (viajeId: number, asientosDisponibles: number, precio: number) => {
-    if (!user) { nav("/auth"); return; }
+  // 🔄 MODIFICADO: Ahora redirige a la pantalla intermedia de Datos de Pasajeros
+  const handleIrADatosPasajeros = (viajeId: number, asientosDisponibles: number, precio: number) => {
+    if (!user) { 
+      nav("/auth"); 
+      return; 
+    }
     if (asientosDisponibles <= 0) {
       toast.error("Este viaje se encuentra lleno.");
       return;
     }
-    nav("/pago", { state: { viajeId, precio, idVehiculo: tipo === "taxi" ? 1 : 2 } });
+    
+    // Transferencia de estados operativos a DatosPasajeros.tsx
+    nav("/datos-pasajeros", { 
+      state: { 
+        viajeId, 
+        precio, 
+        idVehiculo: tipo === "taxi" ? 1 : 2,
+        asientosDisponibles
+      } 
+    });
   };
 
   return (
@@ -229,7 +239,12 @@ const Viajes = () => {
                         </div>
                         <div className="mt-4 flex items-center justify-between">
                           <p className="text-lg font-bold text-primary">{formatPrecio(viaje.precio)}</p>
-                          <Button size="sm" disabled={lleno} onClick={() => handleIrAlPago(viaje.id, viaje.asientos_disponibles, viaje.precio)} className="bg-primary hover:bg-primary/90">
+                          <Button 
+                            size="sm" 
+                            disabled={lleno} 
+                            onClick={() => handleIrADatosPasajeros(viaje.id, viaje.asientos_disponibles, viaje.precio)} 
+                            className="bg-primary hover:bg-primary/90"
+                          >
                             Comprar
                           </Button>
                         </div>
