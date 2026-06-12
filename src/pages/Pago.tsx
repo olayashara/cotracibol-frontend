@@ -20,21 +20,32 @@ const cardSchema = z.object({
   cvv: z.string().regex(/^\d{3,4}$/, "CVV inválido"),
 });
 
+interface Pasajero {
+  nombre: string;
+  apellido: string;
+  tipoDocumento: string;
+  documento: string;
+  fechaNacimiento: string;
+  isAsientoExtra: boolean;
+}
+
 const Pago = () => {
   const { user, loading } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
 
   const viajeId = location.state?.viajeId || null;
-  const precioFinal = location.state?.precio || 35000;
   const idVehiculo = location.state?.idVehiculo || 2; 
+  const cantidadPasajes = location.state?.cantidadPasajes || 1;
+  const pasajeros = (location.state?.pasajeros || []) as Pasajero[];
+  const precioFinal = location.state?.totalPagar || location.state?.precio || 35000;
 
   const [card, setCard] = useState({ nombre: "", numero: "", expiracion: "", cvv: "" });
   const [procesando, setProcesando] = useState(false);
   const [pagado, setPagado] = useState(false);
 
   const [asientosOcupados, setAsientosOcupados] = useState<number[]>([]);
-  const [asientoSeleccionado, setAsientoSeleccionado] = useState<number | null>(null);
+  const [asientosSeleccionados, setAsientosSeleccionados] = useState<number[]>([]);
   const [cargandoAsientos, setCargandoAsientos] = useState(false);
 
   const fechaLegible = useMemo(() => format(new Date(), "EEEE, d 'de' MMMM", { locale: es }), []);
@@ -67,15 +78,29 @@ const Pago = () => {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
 
-  // CORRECCIÓN PROFUNDA: Esta es la función encargada de procesar la compra
+  const handleToggleAsiento = (numero: number) => {
+    setAsientosSeleccionados((prev) => {
+      if (prev.includes(numero)) {
+        return prev.filter((a) => a !== numero);
+      }
+      if (prev.length >= cantidadPasajes) {
+        toast.error(`Ya has seleccionado los ${cantidadPasajes} asientos correspondientes a tus pasajes.`);
+        return prev;
+      }
+      return [...prev, numero].sort((a, b) => a - b);
+    });
+  };
+
+  // 🔄 CORRECCIÓN PROFUNDA: Adaptado para registrar múltiples pasajes iterativamente
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (procesando || pagado) return;
     setProcesando(true);
 
-    if (idVehiculo === 2 && !asientoSeleccionado) {
-      toast.error("Por favor, selecciona tu asiento en el mapa de la buseta.");
+    // Validación del mapa de puestos
+    if (idVehiculo === 2 && asientosSeleccionados.length !== cantidadPasajes) {
+      toast.error(`Por favor, selecciona exactamente ${cantidadPasajes} asientos en el mapa de la buseta.`);
       setProcesando(false);
       return;
     }
@@ -94,7 +119,7 @@ const Pago = () => {
     }
 
     try {
-      // 1. Validamos si aún quedan asientos disponibles antes de proceder
+      // 1. Validamos disponibilidad general
       const { data: viajeActual, error: errorFetch } = await supabase
         .from("tbl_viaje" as any)
         .select("asientos_disponibles")
@@ -102,27 +127,29 @@ const Pago = () => {
         .single() as any;
 
       if (errorFetch || !viajeActual) throw new Error("No se pudo verificar la disponibilidad del viaje.");
-      if (viajeActual.asientos_disponibles <= 0) {
-        throw new Error("¡Lo sentimos! Este viaje ya no cuenta con cupos disponibles.");
+      if (viajeActual.asientos_disponibles < cantidadPasajes) {
+        throw new Error(`¡Lo sentimos! Este viaje solo cuenta con ${viajeActual.asientos_disponibles} cupos disponibles.`);
       }
 
-      // 2. SE ELIMINÓ EL '.update()' MANUAL DEL FRONTEND.
-      // Ahora delegamos la responsabilidad al trigger_descontar_asientos de Supabase.
-      // Insertamos el registro en tbl_tiquete con asientos_comprados = 1.
-      const { error: errorTiquete } = await supabase
-        .from("tbl_tiquete" as any)
-        .insert({
-          id_viaje: viajeId,
-          email_pasajero: user.email,
-          asientos_comprados: 1,
-          num_asiento: idVehiculo === 2 ? asientoSeleccionado : null
-        } as any);
+      // 2. Inserción en bucle para registrar los tiquetes de todo el grupo familiar/pasajeros
+      const totalTiquetes = pasajeros.length > 0 ? pasajeros.length : cantidadPasajes;
+      
+      for (let i = 0; i < totalTiquetes; i++) {
+        const { error: errorTiquete } = await supabase
+          .from("tbl_tiquete" as any)
+          .insert({
+            id_viaje: viajeId,
+            email_pasajero: user.email,
+            asientos_comprados: 1,
+            num_asiento: idVehiculo === 2 ? asientosSeleccionados[i] : null
+          } as any);
 
-      if (errorTiquete) throw new Error("Error al guardar el tiquete oficial en el sistema.");
+        if (errorTiquete) throw new Error("Error al guardar los tiquetes oficiales en el sistema.");
+      }
 
       // 3. Éxito total en la transacción
       setPagado(true);
-      toast.success("¡Pago aprobado y tiquete reservado con éxito!");
+      toast.success(`¡Pago aprobado y tus ${cantidadPasajes} tiquetes fueron reservados con éxito!`);
     } catch (err: any) {
       console.error("Error en el proceso de pago:", err);
       toast.error(err?.message || "Ocurrió un problema inesperado en la transacción.");
@@ -132,7 +159,7 @@ const Pago = () => {
 
   const renderAsientoBoton = (numero: number) => {
     const estaOcupado = asientosOcupados.includes(numero);
-    const estaSeleccionado = asientoSeleccionado === numero;
+    const estaSeleccionado = asientosSeleccionados.includes(numero);
 
     let estilo = "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700";
     if (estaOcupado) estilo = "border-amber-400 bg-amber-400 text-white cursor-not-allowed";
@@ -143,7 +170,7 @@ const Pago = () => {
         key={`asiento-${numero}`}
         type="button"
         disabled={estaOcupado}
-        onClick={() => setAsientoSeleccionado(numero)}
+        onClick={() => handleToggleAsiento(numero)}
         className={`flex flex-col items-center justify-center rounded-xl border-2 font-bold text-xs h-11 w-11 transition-all ${estilo}`}
       >
         <Armchair className="h-3 w-3 mb-0.5" />
@@ -163,7 +190,7 @@ const Pago = () => {
           <div className="mt-10 max-w-xl mx-auto p-8 rounded-2xl bg-card border text-center shadow-lg">
             <CheckCircle2 className="h-16 w-16 text-emerald-500 mx-auto" />
             <h2 className="text-3xl font-extrabold mt-4">¡Pago aprobado!</h2>
-            <p className="text-muted-foreground mt-2">Tu tiquete se registró correctamente en la base de datos.</p>
+            <p className="text-muted-foreground mt-2">Tus tiquetes se registraron correctamente en la base de datos.</p>
             <div className="mt-6 flex gap-3 justify-center">
               <Button onClick={() => nav("/mis-tiquetes")}>Ver mis tiquetes</Button>
               <Button variant="outline" onClick={() => nav("/viajes")}>Comprar otro</Button>
@@ -265,14 +292,14 @@ const Pago = () => {
                 {idVehiculo === 2 ? "Servicio Buseta" : "Servicio Taxi"}
               </div>
 
-              {idVehiculo === 2 && asientoSeleccionado && (
+              {idVehiculo === 2 && asientosSeleccionados.length > 0 && (
                 <div className="mt-3 text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-lg font-mono">
-                  Asiento Seleccionado: <strong>#{asientoSeleccionado}</strong>
+                  Asientos Seleccionados: <strong>{asientosSeleccionados.map(a => `#${a}`).join(", ")}</strong>
                 </div>
               )}
               <hr className="my-4" />
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Monto Total</span>
+                <span className="text-sm text-muted-foreground">Monto Total ({cantidadPasajes} pasajes)</span>
                 <span className="text-2xl font-black text-slate-900">{formatPrecio(precioFinal)}</span>
               </div>
             </aside>
