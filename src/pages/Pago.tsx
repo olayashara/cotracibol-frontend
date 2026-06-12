@@ -27,6 +27,7 @@ interface Pasajero {
   documento: string;
   fechaNacimiento: string;
   isAsientoExtra: boolean;
+  adultoResponsableIdx: string;
 }
 
 const Pago = () => {
@@ -169,8 +170,9 @@ const Pago = () => {
               apellido: pasajeroActual.apellido,
               tipo_documento: pasajeroActual.tipoDocumento,
               documento: pasajeroActual.documento,
-              fecha_nacimiento: pasajeroActual.fechaNacimiento,
-              is_asiento_extra: pasajeroActual.isAsientoExtra
+              fecha_nacimiento: pasajeroActual.fechaNacimiento || null,
+              is_asiento_extra: pasajeroActual.isAsientoExtra || false,
+              adulto_responsable: pasajeroActual.adultoResponsableIdx || null
             } as any);
 
           if (errorPasajero) {

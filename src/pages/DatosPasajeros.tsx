@@ -17,7 +17,7 @@ interface PasajeroForm {
   documento: string;
   fechaNacimiento: string;
   isAsientoExtra: boolean;
-  adultoResponsableIdx: string; // Para vincular menores de edad
+  adultoResponsableIdx: string;
 }
 
 export const DatosPasajeros = () => {
