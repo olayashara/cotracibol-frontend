@@ -34,6 +34,7 @@ const Pago = () => {
   const nav = useNavigate();
   const location = useLocation();
 
+  // 🔄 MODIFICADO: Captura de estados dinámicos del flujo multipasajero
   const viajeId = location.state?.viajeId || null;
   const idVehiculo = location.state?.idVehiculo || 2; 
   const cantidadPasajes = location.state?.cantidadPasajes || 1;
@@ -45,6 +46,7 @@ const Pago = () => {
   const [pagado, setPagado] = useState(false);
 
   const [asientosOcupados, setAsientosOcupados] = useState<number[]>([]);
+  // 🔄 MODIFICADO: Ahora controlamos un arreglo de asientos seleccionados
   const [asientosSeleccionados, setAsientosSeleccionados] = useState<number[]>([]);
   const [cargandoAsientos, setCargandoAsientos] = useState(false);
 
@@ -78,6 +80,7 @@ const Pago = () => {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
 
+  // 🔄 MODIFICADO: Manejar lógica de selección múltiple según la cantidad de pasajes
   const handleToggleAsiento = (numero: number) => {
     setAsientosSeleccionados((prev) => {
       if (prev.includes(numero)) {
@@ -159,6 +162,7 @@ const Pago = () => {
 
   const renderAsientoBoton = (numero: number) => {
     const estaOcupado = asientosOcupados.includes(numero);
+    // 🔄 MODIFICADO: Verifica si el número de puesto se encuentra dentro del arreglo
     const estaSeleccionado = asientosSeleccionados.includes(numero);
 
     let estilo = "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700";
@@ -170,6 +174,7 @@ const Pago = () => {
         key={`asiento-${numero}`}
         type="button"
         disabled={estaOcupado}
+        // 🔄 MODIFICADO: Ejecuta la lógica multiselección
         onClick={() => handleToggleAsiento(numero)}
         className={`flex flex-col items-center justify-center rounded-xl border-2 font-bold text-xs h-11 w-11 transition-all ${estilo}`}
       >
@@ -292,6 +297,7 @@ const Pago = () => {
                 {idVehiculo === 2 ? "Servicio Buseta" : "Servicio Taxi"}
               </div>
 
+              {/* 🔄 MODIFICADO: Renderizado para soportar múltiples sillas seleccionadas */}
               {idVehiculo === 2 && asientosSeleccionados.length > 0 && (
                 <div className="mt-3 text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-lg font-mono">
                   Asientos Seleccionados: <strong>{asientosSeleccionados.map(a => `#${a}`).join(", ")}</strong>
