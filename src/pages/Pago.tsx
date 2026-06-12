@@ -35,7 +35,7 @@ const Pago = () => {
   const nav = useNavigate();
   const location = useLocation();
 
-  // 🔄 MODIFICADO: Captura de estados dinámicos del flujo multipasajero
+  // MODIFICADO: Captura de estados dinámicos del flujo multipasajero
   const viajeId = location.state?.viajeId || null;
   const idVehiculo = location.state?.idVehiculo || 2; 
   const cantidadPasajes = location.state?.cantidadPasajes || 1;
@@ -47,7 +47,7 @@ const Pago = () => {
   const [pagado, setPagado] = useState(false);
 
   const [asientosOcupados, setAsientosOcupados] = useState<number[]>([]);
-  // 🔄 MODIFICADO: Ahora controlamos un arreglo de asientos seleccionados
+  // MODIFICADO: Ahora controlamos un arreglo de asientos seleccionados
   const [asientosSeleccionados, setAsientosSeleccionados] = useState<number[]>([]);
   const [cargandoAsientos, setCargandoAsientos] = useState(false);
 
@@ -81,7 +81,7 @@ const Pago = () => {
   if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
 
-  // 🔄 MODIFICADO: Manejar lógica de selección múltiple según la cantidad de pasajes
+  // MODIFICADO: Manejar lógica de selección múltiple según la cantidad de pasajes
   const handleToggleAsiento = (numero: number) => {
     setAsientosSeleccionados((prev) => {
       if (prev.includes(numero)) {
@@ -95,7 +95,7 @@ const Pago = () => {
     });
   };
 
-  // 🔄 CORRECCIÓN PROFUNDA: Adaptado para registrar múltiples pasajes iterativamente enlazando tbl_pasajero
+  // CORRECCIÓN PROFUNDA: Adaptado para registrar múltiples pasajes iterativamente enlazando tbl_pasajero con claves primarias reales
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -138,6 +138,9 @@ const Pago = () => {
       // 2. Inserción en bucle para registrar los tiquetes y sus respectivos pasajeros en la nueva tabla
       const totalTiquetes = pasajeros.length > 0 ? pasajeros.length : cantidadPasajes;
       
+      const mapeoIdsPasajeros: { [key: number]: any } = {};
+      const pasajerosMenoresDeEdad: { idRealMenor: any, idxAdultoAsignado: string }[] = [];
+      
       for (let i = 0; i < totalTiquetes; i++) {
         const pasajeroActual = pasajeros[i];
 
@@ -162,7 +165,7 @@ const Pago = () => {
 
         // B. Si hay datos detallados del formulario, los guardamos en tbl_pasajero enlazados al id_tiquete
         if (pasajeroActual) {
-          const { error: errorPasajero } = await supabase
+          const respuestaPasajero = await supabase
             .from("tbl_pasajero" as any)
             .insert({
               id_tiquete: nuevoTiquete.id,
@@ -172,12 +175,40 @@ const Pago = () => {
               documento: pasajeroActual.documento,
               fecha_nacimiento: pasajeroActual.fechaNacimiento || null,
               is_asiento_extra: pasajeroActual.isAsientoExtra || false,
-              adulto_responsable_idx: pasajeroActual.adultoResponsableIdx !== "" ? pasajeroActual.adultoResponsableIdx : null
-            } as any);
+              adulto_responsable_idx: null
+            } as any)
+            .select("id")
+            .single() as any;
 
-          if (errorPasajero) {
-            console.error("Error guardando pasajero:", errorPasajero);
+          if (respuestaPasajero.error || !respuestaPasajero.data) {
+            console.error("Error guardando pasajero:", respuestaPasajero.error);
             throw new Error(`Error al registrar el manifiesto del Pasajero #${i + 1}.`);
+          }
+
+          mapeoIdsPasajeros[i] = respuestaPasajero.data.id;
+
+          if (pasajeroActual.adultoResponsableIdx !== "") {
+            pasajerosMenoresDeEdad.push({
+              idRealMenor: respuestaPasajero.data.id,
+              idxAdultoAsignado: pasajeroActual.adultoResponsableIdx
+            });
+          }
+        }
+      }
+
+      // Proceso de actualizacion diferida para emparejar las claves primarias autogeneradas
+      for (const menor of pasajerosMenoresDeEdad) {
+        const posicionAdulto = parseInt(menor.idxAdultoAsignado, 10);
+        const idRealDelAdulto = mapeoIdsPasajeros[posicionAdulto];
+
+        if (idRealDelAdulto) {
+          const { error: errorUpdate } = await supabase
+            .from("tbl_pasajero" as any)
+            .update({ adulto_responsable_idx: idRealDelAdulto } as any)
+            .eq("id", menor.idRealMenor);
+
+          if (errorUpdate) {
+            console.error("Error vinculando clave unica del adulto responsable:", errorUpdate);
           }
         }
       }
@@ -194,7 +225,7 @@ const Pago = () => {
 
   const renderAsientoBoton = (numero: number) => {
     const estaOcupado = asientosOcupados.includes(numero);
-    // 🔄 MODIFICADO: Verifica si el número de puesto se encuentra dentro del arreglo
+    // MODIFICADO: Verifica si el número de puesto se encuentra dentro del arreglo
     const estaSeleccionado = asientosSeleccionados.includes(numero);
 
     let estilo = "border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700";
@@ -206,7 +237,7 @@ const Pago = () => {
         key={`asiento-${numero}`}
         type="button"
         disabled={estaOcupado}
-        // 🔄 MODIFICADO: Ejecuta la lógica multiselección
+        // MODIFICADO: Ejecuta la lógica multiselección
         onClick={() => handleToggleAsiento(numero)}
         className={`flex flex-col items-center justify-center rounded-xl border-2 font-bold text-xs h-11 w-11 transition-all ${estilo}`}
       >
@@ -329,7 +360,7 @@ const Pago = () => {
                 {idVehiculo === 2 ? "Servicio Buseta" : "Servicio Taxi"}
               </div>
 
-              {/* 🔄 MODIFICADO: Renderizado para soportar múltiples sillas seleccionadas */}
+              {/* MODIFICADO: Renderizado para soportar múltiples sillas seleccionadas */}
               {idVehiculo === 2 && asientosSeleccionados.length > 0 && (
                 <div className="mt-3 text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-2 rounded-lg font-mono">
                   Asientos Seleccionados: <strong>{asientosSeleccionados.map(a => `#${a}`).join(", ")}</strong>
